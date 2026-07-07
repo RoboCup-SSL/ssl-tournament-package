@@ -6,3 +6,8 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Build output
+/release/
+/ssl-tournament
+/ssl-tournament.exe
