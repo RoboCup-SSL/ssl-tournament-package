@@ -20,11 +20,15 @@ PLATFORMS := \
 
 export CGO_ENABLED := 0
 
+# Stamp the version into the binary (main.version). -s -w strips debug info
+# to shrink the static binaries.
+LDFLAGS := -s -w -X main.version=$(VERSION)
+
 .PHONY: all build run test clean release
 
 # Native build → ./ssl-tournament
 build:
-	go build -o $(CMD) $(PKG)
+	go build -ldflags "$(LDFLAGS)" -o $(CMD) $(PKG)
 
 run:
 	go run $(PKG)
@@ -40,7 +44,7 @@ release: clean
 		ext=; [ "$$os" = "windows" ] && ext=.exe; \
 		out=release/$(CMD)_$(VERSION)_$${os}-$${arch}$$ext; \
 		echo "building $$out"; \
-		GOOS=$$os GOARCH=$$arch go build -o $$out $(PKG) || exit 1; \
+		GOOS=$$os GOARCH=$$arch go build -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
 	done
 	@echo "done → ./release"
 
