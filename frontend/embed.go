@@ -9,11 +9,11 @@ import (
 //go:embed dist
 var content embed.FS
 
-// HandleUi registers the embedded web UI on the default ServeMux at "/".
-func HandleUi() {
+// Handler serves the embedded web UI (the built frontend/dist).
+func Handler() http.Handler {
 	dist, err := fs.Sub(content, "dist")
 	if err != nil {
 		panic(err)
 	}
-	http.Handle("/", http.FileServer(http.FS(dist)))
+	return http.FileServer(http.FS(dist))
 }
