@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/user"
 
 	"github.com/RoboCup-SSL/ssl-tournament-package/internal/server"
 )
@@ -26,18 +27,22 @@ import (
 // version is stamped at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
+// The service's identity, derived from one name so nothing can drift. The
+// service always binds all interfaces so refs/helpers on the venue Wi-Fi
+// reach it from their phones.
 const (
-	svcUser  = "ssl-tournament"
+	appName  = "ssl-tournament"
+	svcUser  = appName
+	unitName = appName + ".service"
+	unitPath = "/etc/systemd/system/" + unitName
+	dataDir  = "/var/lib/" + appName
 	binPath  = "/usr/local/bin/ssl-tournament-service"
-	unitName = "ssl-tournament.service"
-	unitPath = "/etc/systemd/system/ssl-tournament.service"
-	dataDir  = "/var/lib/ssl-tournament"
+	bindHost = "0.0.0.0"
 )
 
-// unitTemplate is filled with (binPath, port). --host 0.0.0.0 so refs/helpers
-// on the venue Wi-Fi reach it from their phones. StateDirectory creates and
-// owns /var/lib/ssl-tournament (the tournament DB lives there from M1 on) and
-// it survives uninstall unless --purge.
+// unitTemplate is filled with (svcUser, binPath, port, dataDir). StateDirectory
+// creates and owns dataDir (the tournament DB lives there from M1 on) and grants
+// the service write access to it; the dir survives uninstall unless --purge.
 const unitTemplate = `[Unit]
 Description=SSL Tournament Package
 Documentation=https://github.com/RoboCup-SSL/ssl-tournament-package
@@ -48,18 +53,17 @@ Wants=network-online.target
 Type=simple
 User=%[1]s
 Group=%[1]s
-ExecStart=%[2]s --serve --host 0.0.0.0 --port %[3]s
+ExecStart=%[2]s --serve --port %[3]s
 Restart=always
 RestartSec=2
-StateDirectory=ssl-tournament
+StateDirectory=%[1]s
 Environment=SSL_TOURNAMENT_DATA_DIR=%[4]s
 
-# Hardening — the service only serves HTTP and writes its data dir.
+# Hardening — the service only serves HTTP and writes its StateDirectory.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=%[4]s
 
 [Install]
 WantedBy=multi-user.target
@@ -70,7 +74,6 @@ func main() {
 	uninstall := flag.Bool("uninstall", false, "Remove the systemd service")
 	purge := flag.Bool("purge", false, "With --uninstall, also delete the data dir and service user")
 	showVersion := flag.Bool("version", false, "Print version and exit")
-	host := flag.String("host", "0.0.0.0", "Host to bind on (serve mode)")
 	port := flag.String("port", "8080", "Port to serve on")
 	flag.Parse()
 
@@ -78,7 +81,7 @@ func main() {
 	case *showVersion:
 		fmt.Println(version)
 	case *serve:
-		if err := server.Run(*host, *port, version); err != nil {
+		if err := server.Run(bindHost, *port, version); err != nil {
 			log.Fatal(err)
 		}
 	case *uninstall:
@@ -181,7 +184,8 @@ func checkSystemd() error {
 }
 
 func userExists(name string) bool {
-	return exec.Command("id", name).Run() == nil
+	_, err := user.Lookup(name)
+	return err == nil
 }
 
 func run(name string, args ...string) error {
