@@ -1,15 +1,7 @@
-// Command ssl-tournament-service is the headless (Linux/systemd) artifact.
-//
-// It contains the full server AND knows how to install itself as a systemd
-// service. Run it bare, as root, and it installs *this very binary* as a
-// service and starts it — no subcommand to fat-finger, no download step, so
-// the version you ran is exactly the version that serves.
-//
-//	sudo ./ssl-tournament-service            # install + start + enable on boot
-//	sudo ./ssl-tournament-service --uninstall            # remove (keeps data)
-//	sudo ./ssl-tournament-service --uninstall --purge    # remove + delete data/user
-//
-// The systemd unit invokes it with the internal --serve flag; humans never do.
+// Command ssl-tournament-service is the headless (Linux/systemd) artifact: run
+// it as root and it installs this binary as a systemd service that starts on
+// boot. The systemd unit invokes it with --serve; humans never do. version is
+// set at build time via -ldflags "-X main.version".
 package main
 
 import (
@@ -24,12 +16,8 @@ import (
 	"github.com/RoboCup-SSL/ssl-tournament-package/internal/server"
 )
 
-// version is stamped at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
-// The service's identity, derived from one name so nothing can drift. The
-// service always binds all interfaces so refs/helpers on the venue Wi-Fi
-// reach it from their phones.
 const (
 	appName  = "ssl-tournament"
 	svcUser  = appName
@@ -40,9 +28,9 @@ const (
 	bindHost = "0.0.0.0"
 )
 
-// unitTemplate is filled with (svcUser, binPath, port, dataDir). StateDirectory
-// creates and owns dataDir (the tournament DB lives there from M1 on) and grants
-// the service write access to it; the dir survives uninstall unless --purge.
+// unitTemplate is rendered with (svcUser, binPath, port, dataDir). StateDirectory
+// creates dataDir, grants the service write access to it, and preserves it across
+// uninstall unless --purge.
 const unitTemplate = `[Unit]
 Description=SSL Tournament Package
 Documentation=https://github.com/RoboCup-SSL/ssl-tournament-package
@@ -58,8 +46,6 @@ Restart=always
 RestartSec=2
 StateDirectory=%[1]s
 Environment=SSL_TOURNAMENT_DATA_DIR=%[4]s
-
-# Hardening — the service only serves HTTP and writes its StateDirectory.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -69,6 +55,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 `
 
+// main dispatches between serve, uninstall, and the default install action.
 func main() {
 	serve := flag.Bool("serve", false, "Run the server (used by systemd; not for manual use)")
 	uninstall := flag.Bool("uninstall", false, "Remove the systemd service")
@@ -97,12 +84,13 @@ func main() {
 	}
 }
 
+// doInstall creates the service user, installs this binary, writes the systemd
+// unit, and starts the service enabled on boot.
 func doInstall(port string) error {
 	if err := checkSystemd(); err != nil {
 		return err
 	}
 
-	// Create the locked-down service user if missing.
 	if !userExists(svcUser) {
 		log.Printf("creating system user %s", svcUser)
 		if err := run("useradd", "--system", "--no-create-home",
@@ -111,7 +99,6 @@ func doInstall(port string) error {
 		}
 	}
 
-	// Install this binary at a stable path.
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locating self: %w", err)
@@ -121,7 +108,6 @@ func doInstall(port string) error {
 	}
 	log.Printf("installed %s (%s)", binPath, version)
 
-	// Write the systemd unit.
 	unit := fmt.Sprintf(unitTemplate, svcUser, binPath, port, dataDir)
 	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("writing unit: %w", err)
@@ -141,8 +127,9 @@ func doInstall(port string) error {
 	return nil
 }
 
+// doUninstall stops and removes the service and binary. With purge it also
+// deletes the data dir and service user; otherwise the data is kept.
 func doUninstall(purge bool) error {
-	// Best-effort stop+disable; ignore errors if it was never installed.
 	_ = run("systemctl", "disable", "--now", unitName)
 	if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing unit: %w", err)
@@ -170,12 +157,14 @@ func doUninstall(purge bool) error {
 	return nil
 }
 
+// requireRoot exits the process unless it is running as root.
 func requireRoot() {
 	if os.Geteuid() != 0 {
 		log.Fatal("must run as root (try: sudo ...)")
 	}
 }
 
+// checkSystemd errors unless systemctl is available on PATH.
 func checkSystemd() error {
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		return fmt.Errorf("systemd (systemctl) not found — headless install is Linux/systemd only")
@@ -183,11 +172,13 @@ func checkSystemd() error {
 	return nil
 }
 
+// userExists reports whether a system user with the given name exists.
 func userExists(name string) bool {
 	_, err := user.Lookup(name)
 	return err == nil
 }
 
+// run executes a command, forwarding its output to this process's stdout/stderr.
 func run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -198,9 +189,11 @@ func run(name string, args ...string) error {
 	return nil
 }
 
+// copyFile copies src to dst with the given mode via a temp file and rename, so
+// a currently-running binary at dst is never truncated.
 func copyFile(src, dst string, mode os.FileMode) error {
 	if src == dst {
-		return nil // already in place
+		return nil
 	}
 	in, err := os.Open(src)
 	if err != nil {
@@ -208,7 +201,6 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer in.Close()
 
-	// Write to a temp file then rename, so we never truncate a running binary.
 	tmp := dst + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
