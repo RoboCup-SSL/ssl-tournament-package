@@ -21,8 +21,12 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
 
 ## Milestone 2 — core API + wizard UI
 - JSON CRUD for teams / tournament / format.
-- Mobile-first wizard frontend (Vue or React + a component lib) built to `dist/`, embedded.
+- Mobile-first wizard frontend built to `dist/`, embedded.
   Flow: welcome → where/when → fields → teams → format → run.
+- Tentative stack (to confirm at M2): **Vue 3 + TypeScript + Quasar + Vite**, mirroring
+  `ssl-game-controller`'s frontend so its setup, dev-proxy, and component patterns copy over.
+  Take GC's toolchain but *not* its transport — GC streams live state over WebSocket+protobuf;
+  this app is API-first JSON over `net/http`, so use a plain fetch/JSON client.
 
 ## Milestone 3 — domain logic (internal packages)
 - `brackets`/`standings`: matches as edges in a bracket graph → "who advances" + "who's
