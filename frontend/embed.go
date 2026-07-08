@@ -1,3 +1,4 @@
+// Package frontend embeds the built web UI and serves it over HTTP.
 package frontend
 
 import (
@@ -9,7 +10,7 @@ import (
 //go:embed dist
 var content embed.FS
 
-// Handler serves the embedded web UI (the built frontend/dist).
+// Handler serves the embedded web UI.
 func Handler() http.Handler {
 	dist, err := fs.Sub(content, "dist")
 	if err != nil {
