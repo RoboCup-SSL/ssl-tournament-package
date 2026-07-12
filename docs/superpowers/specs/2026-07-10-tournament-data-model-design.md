@@ -78,9 +78,10 @@ ranks**, and nothing prevents `a_team_id == b_team_id`.
    This one mechanism expresses the whole bracket graph, including
    double-elimination's winner-and-loser routing.
 
-4. **Final placements use the same reference mechanism.** "5th = loser of Low 2.1",
-   "1st = winner of Grand Final" — a placement references a match outcome, just like
-   a slot does.
+4. **Final placements use the same reference mechanism — all three kinds.** "5th =
+   loser of Low 2.1", "1st = winner of Grand Final", and equally "3rd–5th = group
+   ranks 3–5" (the German Open shape, where no match decides the lower places). A
+   placement references a match outcome or a group rank, just like a slot does.
 
 5. **`division` is a table, not a string** (revised from the earlier free-string
    design). A division row is still freeform — organizers create whatever divisions
@@ -240,6 +241,7 @@ CREATE TABLE team (
   name          TEXT NOT NULL,
   country       TEXT NOT NULL DEFAULT '',
   contact       TEXT NOT NULL DEFAULT '',
+  notes         TEXT NOT NULL DEFAULT '',  -- freeform ("merged from X+Y", "shares robots with Z", DQ reason)
   withdrawn_at  TEXT,      -- set when the team withdraws / is disqualified;
                            -- teams are withdrawn, never deleted, once they have history
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
@@ -258,6 +260,7 @@ CREATE TABLE team_group (
   tournament_id        INTEGER NOT NULL REFERENCES tournament(id) ON DELETE CASCADE,
   division_id          INTEGER REFERENCES division(id) ON DELETE SET NULL,
   name                 TEXT NOT NULL,       -- e.g. "G1"
+  notes                TEXT NOT NULL DEFAULT '',  -- freeform (e.g. why a confirmed ranking deviates)
   ranking_confirmed_at TEXT                 -- null until organizer blesses the order
 );
 
@@ -286,9 +289,11 @@ CREATE TABLE match (
   field_id      INTEGER          REFERENCES field(id)       ON DELETE SET NULL,
   scheduled_at  TEXT,                             -- ISO-8601 datetime, nullable
   -- cancelled = never happened / won't happen; invalidated = played, result void
-  -- (disqualification, score-entry error). Standings count only 'finished'.
+  -- (disqualification, score-entry error); suspended = interrupted mid-match
+  -- (power/vision failure), partial scores kept, scheduled_at updated to the
+  -- resumption slot. Standings count only 'finished'.
   status        TEXT NOT NULL DEFAULT 'scheduled'
-                  CHECK (status IN ('scheduled','playing','finished','cancelled','invalidated')),
+                  CHECK (status IN ('scheduled','playing','suspended','finished','cancelled','invalidated')),
 
   -- Duty teams: referee + GC operator, assistant referee + vision operator.
   referee_team_id           INTEGER REFERENCES team(id) ON DELETE SET NULL,
@@ -304,6 +309,7 @@ CREATE TABLE match (
   -- a_score == b_score but a winner is still decided. NULL + equal scores = a draw
   -- (valid in group play). match_winner/match_loser references read this.
   winner_team_id INTEGER REFERENCES team(id) ON DELETE SET NULL,
+  notes          TEXT NOT NULL DEFAULT '',  -- freeform ("suspended at 4-2", "walkover", "reffed by Nicolai")
   created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -320,7 +326,9 @@ CREATE TABLE slot_source (
   PRIMARY KEY (match_id, slot)
 );
 
--- Final standings: rank N in a division = winner/loser of some match.
+-- Final standings. Same reference vocabulary as slot_source: a rank can come
+-- from a match outcome ("1st = winner of Grand Final") OR straight from a group
+-- rank ("3rd-5th = group ranks 3-5", the German Open shape).
 -- No unique rank: shared placements (e.g. two 3rds) are legal.
 CREATE TABLE placement (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -328,9 +336,11 @@ CREATE TABLE placement (
   division_id      INTEGER REFERENCES division(id) ON DELETE SET NULL,
   rank             INTEGER NOT NULL,
   label            TEXT NOT NULL DEFAULT '',     -- e.g. "Champion"
-  source_match_id  INTEGER REFERENCES match(id) ON DELETE SET NULL,
-  source_outcome   TEXT CHECK (source_outcome IN ('winner','loser')),
-  resolved_team_id INTEGER REFERENCES team(id)  ON DELETE SET NULL
+  source_kind      TEXT CHECK (source_kind IN ('group_rank','match_winner','match_loser')),
+  source_group_id  INTEGER REFERENCES team_group(id) ON DELETE SET NULL,  -- for group_rank
+  source_rank      INTEGER,                                               -- for group_rank
+  source_match_id  INTEGER REFERENCES match(id)      ON DELETE SET NULL,  -- for match_winner/loser
+  resolved_team_id INTEGER REFERENCES team(id)       ON DELETE SET NULL
 );
 
 -- Pending-event queue (external producers push; organizer approves). See architecture.
@@ -341,13 +351,17 @@ CREATE TABLE event (
   match_id      INTEGER REFERENCES match(id) ON DELETE SET NULL,
   payload       TEXT NOT NULL DEFAULT '{}',      -- JSON
   source        TEXT NOT NULL DEFAULT '',        -- producer identity
+  -- Advisory grouping key. Dedupe happens at the APP level (drop an incoming event
+  -- only while an identical (source, dedupe_key) row is still pending) and in the
+  -- queue UI (group same-key rows). Deliberately NOT a UNIQUE constraint: two GC
+  -- instances (or one restarting) can legitimately emit colliding keys, and the DB
+  -- must never reject a producer fact — the human-reviewed queue is the last line.
   dedupe_key    TEXT,
   status        TEXT NOT NULL DEFAULT 'pending'
                   CHECK (status IN ('pending','approved','rejected')),
   received_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   resolved_at   TEXT,
-  resolved_by   INTEGER REFERENCES user(id) ON DELETE SET NULL,
-  UNIQUE (source, dedupe_key)                    -- dedupe mechanism (not a "rule")
+  resolved_by   INTEGER REFERENCES user(id) ON DELETE SET NULL
 );
 
 -- Instance-global auth (not tournament-scoped).
@@ -395,8 +409,9 @@ CREATE INDEX idx_event_tournament     ON event(tournament_id);
   `(match_winner, ref_match_id=<LL1>)`.
 - Loser routing (`LU1` = loser of Upper 1) → a slot with
   `kind='match_loser', ref_match_id=<Upper 1>`.
-- Placement "5th = loser of Low 2.1" → `placement(rank=5, source_match_id=<Low 2.1>,
-  source_outcome='loser')`.
+- Placement "5th = loser of Low 2.1" → `placement(rank=5, source_kind='match_loser',
+  source_match_id=<Low 2.1>)`. A table-only format's "4th = group rank 4" →
+  `placement(rank=4, source_kind='group_rank', source_group_id=<G1>, source_rank=4)`.
 
 Resolution (M3): when a match finishes, set `winner_team_id`; any `slot_source` /
 `placement` pointing at it resolves (`match_winner`→winner, `match_loser`→the other
@@ -426,6 +441,31 @@ row operations plus the resolver's existing triggers:
    `UPDATE slot_source/placement SET ref_match_id=<replay> WHERE ref_match_id=<old>`;
    resolver clears now-undecided downstream slots and re-fills them as the replay
    completes. The voided match stays as unreferenced history.
+
+**Round 2 (adversarial-agent scenarios)** — drove four schema deltas and a set of
+documented known-strains:
+
+- **Placements straight from the table** (German Open 3rd–5th) → exposed that
+  `placement` lacked the `group_rank` source kind; fixed (same vocabulary as
+  `slot_source`).
+- **Two GC instances colliding on `dedupe_key`** → the former
+  `UNIQUE(source, dedupe_key)` was the one place the DB hard-rejected a legitimate
+  producer fact, violating the freeform principle; dropped. Dedupe is app-level
+  (drop only while an identical key is still *pending*) + queue-UI grouping.
+- **Match suspended overnight** (power/vision failure at 4–2) → `suspended` status;
+  `scheduled_at` moves to the resumption slot; partial scores kept.
+- **Sticky-note facts** (joint/merged teams, standings penalties, shared robots,
+  human referees at small events, suspension details) → `notes` columns on `team`,
+  `match`, `team_group`. Structured versions (standings adjustments, inter-team
+  scheduling constraints, team merge/alias) are deliberately deferred to M3+, when
+  the standings rules and advisory layer they feed are actually designed.
+- **Known strains, accepted:** conditional matches — a double-elim *bracket reset*
+  ("Grand Final 2 if the lower-bracket team wins GF1") or a Bo3 series game 3 —
+  are pre-created and wired normally, then cancelled + re-pointed by hand in the
+  branch not taken, with the advisory layer flagging dangling wiring. A
+  series/conditional-match entity is not worth its machinery until a real event
+  demands it. Walkover cascades and late-arriving teams reduce to existing row ops
+  (verified HANDLES).
 
 ## Out of scope for this spec
 
