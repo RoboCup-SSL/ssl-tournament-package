@@ -222,6 +222,11 @@ CREATE TABLE tournament (
   location   TEXT NOT NULL DEFAULT '',
   starts_on  TEXT,                        -- ISO-8601 date, nullable
   ends_on    TEXT,
+  -- Schedule-planning defaults, stored as plain facts (the automated scheduler
+  -- that would use them is a later, non-MVP feature). RoboCup: 60 + 30;
+  -- Japan Open: 45. Per-match override: match.duration_minutes.
+  default_match_minutes INTEGER,          -- planned slot length per match
+  default_gap_minutes   INTEGER,          -- turnaround between matches on a field
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -305,6 +310,7 @@ CREATE TABLE match (
   label         TEXT NOT NULL DEFAULT '',        -- "Upper 1", "Grand Final", "G1"
   field_id      INTEGER          REFERENCES field(id)       ON DELETE SET NULL,
   scheduled_at  TEXT,                             -- ISO-8601 datetime, nullable
+  duration_minutes INTEGER,                       -- overrides tournament.default_match_minutes
   -- cancelled = never happened / won't happen; invalidated = played, result void
   -- (disqualification, score-entry error); suspended = interrupted mid-match
   -- (power/vision failure), partial scores kept, scheduled_at updated to the
@@ -511,6 +517,13 @@ documented known-strains:
 - **"Did it actually happen?"** → `forfeited` status: counts like `finished` but
   was not (fully) played — a conventional 10:0 walkover is now distinguishable
   from a real 10:0 (gamelog validation knows not to expect a log).
+- **Follow-up decisions:** match durations = tournament defaults
+  (`default_match_minutes` + `default_gap_minutes`) with per-match
+  `duration_minutes` override — stored facts only, the automated scheduler is
+  non-MVP. Forfeit scores are organizer-entered (conventional 10:0 or NULL, both
+  supported; the choice is per-ruleset). Team self-service practice booking is a
+  later API/auth feature — `field_booking` (team + start/stop) already suffices
+  as the record.
 
 ## Out of scope for this spec
 
@@ -522,3 +535,6 @@ documented known-strains:
   teams.
 - Schema **migrations** framework (M1 implementation detail).
 - API shape (M2).
+- **Automated scheduler** (would consume the duration/gap defaults) — non-MVP.
+- **Team self-service practice booking** (request/approval flow, auth) — later;
+  the `field_booking` row shape already covers the record itself.
