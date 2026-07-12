@@ -143,6 +143,32 @@ re-wired mid-tournament, fields added on day 2 — every step is just rows, and
 resolution re-runs whenever an upstream fact changes (with the human-approval gate
 in front of anything an external producer pushes).
 
+### Resolution semantics: materialized on write, never computed on read
+
+Resolved teams are **written into `match.a_team_id`/`b_team_id`** by the resolver
+(M3); readers never compute anything. The UI reads plain match rows — a NULL slot
+renders as its wiring label ("Winner of Upper 1"). Rationale: reads dominate
+(every phone on venue Wi-Fi) and the resolved team is itself an organizer-visible
+fact, not a derived view.
+
+- **Triggers:** the resolver runs on exactly three mutating events — a match gets
+  `winner_team_id` set, a group's ranking is confirmed, a `slot_source` row is
+  edited. All writes flow through the single service, so there is one choke point
+  and no cache-invalidation problem; the materialized team IDs *are* the cache.
+- **One hop, no recursion:** a chain elim→elim→elim→group never needs traversal.
+  Each slot resolves the moment its upstream completes (indexed lookups via
+  `idx_slot_source_match` / `idx_slot_source_group`); by induction the bracket
+  fills itself as the tournament runs. `match_loser` resolves to the participant
+  that isn't the winner — if a match was finished without known participants
+  (legal, freeform), the slot stays NULL and the advisory layer flags it.
+- **Corrections:** if an upstream result changes, the resolver overwrites slots on
+  **unfinished** matches only. A downstream match already played with the "wrong"
+  team is recorded history — the advisory layer reports the inconsistency; nothing
+  is silently rewritten.
+- **Manual override:** the organizer may hand-set a slot's team even where wiring
+  exists; to deviate permanently, edit or remove the `slot_source` row (otherwise
+  re-resolution overwrites the override — exact precedence UX is M3).
+
 ## Entities & relationships
 
 ```
