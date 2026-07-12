@@ -162,9 +162,11 @@ fact, not a derived view.
   that isn't the winner — if a match was finished without known participants
   (legal, freeform), the slot stays NULL and the advisory layer flags it.
 - **Corrections:** if an upstream result changes, the resolver overwrites slots on
-  **unfinished** matches only. A downstream match already played with the "wrong"
-  team is recorded history — the advisory layer reports the inconsistency; nothing
-  is silently rewritten.
+  **unfinished** matches only — including **clearing a slot back to NULL** when its
+  upstream becomes undecided again (e.g. wiring re-pointed at a not-yet-played
+  replay). A downstream match already played with the "wrong" team is recorded
+  history — the advisory layer reports the inconsistency; nothing is silently
+  rewritten.
 - **Manual override:** the organizer may hand-set a slot's team even where wiring
   exists; to deviate permanently, edit or remove the `slot_source` row (otherwise
   re-resolution overwrites the override — exact precedence UX is M3).
@@ -238,6 +240,8 @@ CREATE TABLE team (
   name          TEXT NOT NULL,
   country       TEXT NOT NULL DEFAULT '',
   contact       TEXT NOT NULL DEFAULT '',
+  withdrawn_at  TEXT,      -- set when the team withdraws / is disqualified;
+                           -- teams are withdrawn, never deleted, once they have history
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -281,8 +285,10 @@ CREATE TABLE match (
   label         TEXT NOT NULL DEFAULT '',        -- "Upper 1", "Grand Final", "G1"
   field_id      INTEGER          REFERENCES field(id)       ON DELETE SET NULL,
   scheduled_at  TEXT,                             -- ISO-8601 datetime, nullable
+  -- cancelled = never happened / won't happen; invalidated = played, result void
+  -- (disqualification, score-entry error). Standings count only 'finished'.
   status        TEXT NOT NULL DEFAULT 'scheduled'
-                  CHECK (status IN ('scheduled','playing','finished','cancelled')),
+                  CHECK (status IN ('scheduled','playing','finished','cancelled','invalidated')),
 
   -- Duty teams: referee + GC operator, assistant referee + vision operator.
   referee_team_id           INTEGER REFERENCES team(id) ON DELETE SET NULL,
@@ -397,6 +403,29 @@ Resolution (M3): when a match finishes, set `winner_team_id`; any `slot_source` 
 team) and the concrete team is written into `match.a_team_id`/`b_team_id` /
 `placement.resolved_team_id`. `group_rank` sources resolve once that group's
 `group_ranking` is confirmed.
+
+## Stress-tested scenarios
+
+Real mid-tournament chaos the model was checked against; each reduces to plain
+row operations plus the resolver's existing triggers:
+
+1. **Match delayed, field's day shifts** → bulk-update `scheduled_at` for later
+   matches on that field (UI convenience). Freeform means transient overlaps are
+   legal; the advisory layer re-checks.
+2. **Mid-tournament disqualification** → set `team.withdrawn_at`; played matches
+   vs. the team → `status='invalidated'` (scores kept as history, excluded from
+   standings, which count only `finished`); future ones → `cancelled`. Organizer
+   confirms the resulting ranking as usual.
+3. **Field becomes unavailable** → re-point `field_id` of its scheduled matches;
+   field is a dumb reassignable pointer.
+4. **Friendly match on an empty field** → a match with NULL `division_id`/`group_id`,
+   teams set directly, nothing referencing it: affects no standings, no bracket.
+5. **Group score corrected during eliminations** → fix the group match; re-confirm
+   ranking (resolver touches only unfinished matches); mark the wrongly-played
+   elimination match `invalidated`; insert the replay with the same wiring;
+   `UPDATE slot_source/placement SET ref_match_id=<replay> WHERE ref_match_id=<old>`;
+   resolver clears now-undecided downstream slots and re-fills them as the replay
+   completes. The voided match stays as unreferenced history.
 
 ## Out of scope for this spec
 
