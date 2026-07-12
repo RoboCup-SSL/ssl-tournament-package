@@ -259,17 +259,22 @@ CREATE TABLE field (
   name          TEXT NOT NULL
 );
 
--- A reservation of a field for a time range: practice slots, calibration,
--- maintenance/closure — anything that isn't a match. team_id NULL = non-team
--- booking ("field closed"). Claims are whole-field; "north half" etc. goes in
--- notes. The advisory layer warns when overlapping claims can't fit (3+ teams
--- on one field at once) — never enforced, per the freeform principle.
+-- A reservation of a field for a time range — anything that isn't a match.
+--   kind='booking': someone uses the field (practice slot, calibration);
+--     claims are whole-field, "north half" etc. goes in notes; the advisory
+--     layer warns when overlapping claims can't fit (3+ teams at once).
+--   kind='blocked': field wholly unavailable (maintenance, venue closed,
+--     announcement); the advisory layer warns on ANY overlapping match/booking.
+-- team_id NULL = non-team row (crew bookings, blocks). Never enforced, per the
+-- freeform principle — a match on a blocked field is legal data plus a warning.
 CREATE TABLE field_booking (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   tournament_id INTEGER NOT NULL REFERENCES tournament(id) ON DELETE CASCADE,
   field_id      INTEGER REFERENCES field(id) ON DELETE SET NULL,
   team_id       INTEGER REFERENCES team(id)  ON DELETE SET NULL,
-  label         TEXT NOT NULL DEFAULT '',     -- "practice", "calibration", "closed"
+  kind          TEXT NOT NULL DEFAULT 'booking'
+                  CHECK (kind IN ('booking','blocked')),
+  label         TEXT NOT NULL DEFAULT '',     -- "practice", "calibration", "venue closed"
   starts_at     TEXT,                         -- ISO-8601 datetime
   ends_at       TEXT,
   notes         TEXT NOT NULL DEFAULT ''
@@ -517,6 +522,11 @@ documented known-strains:
 - **"Did it actually happen?"** → `forfeited` status: counts like `finished` but
   was not (fully) played — a conventional 10:0 walkover is now distinguishable
   from a real 10:0 (gamelog validation knows not to expect a log).
+- **Blocked-off fields** → `field_booking.kind` (`booking` | `blocked`): a
+  `blocked` row makes a field wholly unavailable for a period (maintenance,
+  venue closed, announcements). Same table as bookings — identical shape, one
+  schedule query — but machine-readably distinct so the advisory layer warns on
+  any overlap (vs. 3+ for shared practice claims).
 - **Follow-up decisions:** match durations = tournament defaults
   (`default_match_minutes` + `default_gap_minutes`) with per-match
   `duration_minutes` override — stored facts only, the automated scheduler is
