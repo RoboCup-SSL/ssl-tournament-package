@@ -222,6 +222,11 @@ CREATE TABLE tournament (
   location   TEXT NOT NULL DEFAULT '',
   starts_on  TEXT,                        -- ISO-8601 date, nullable
   ends_on    TEXT,
+  -- Daily venue hours, HH:MM local, nullable. Advisory warns about matches/
+  -- bookings outside them. Day-specific exceptions (setup day, early close)
+  -- are expressed as field_booking kind='blocked' rows.
+  venue_opens  TEXT,                      -- e.g. "08:00"
+  venue_closes TEXT,                      -- e.g. "22:00"
   -- Schedule-planning defaults, stored as plain facts (the automated scheduler
   -- that would use them is a later, non-MVP feature). RoboCup: 60 + 30;
   -- Japan Open: 45. Per-match override: match.duration_minutes.
@@ -527,6 +532,9 @@ documented known-strains:
   venue closed, announcements). Same table as bookings — identical shape, one
   schedule query — but machine-readably distinct so the advisory layer warns on
   any overlap (vs. 3+ for shared practice claims).
+- **Venue hours** → `tournament.venue_opens` / `venue_closes` (daily HH:MM
+  defaults; advisory checks schedule against them; day-specific exceptions are
+  `blocked` booking rows).
 - **Follow-up decisions:** match durations = tournament defaults
   (`default_match_minutes` + `default_gap_minutes`) with per-match
   `duration_minutes` override — stored facts only, the automated scheduler is
