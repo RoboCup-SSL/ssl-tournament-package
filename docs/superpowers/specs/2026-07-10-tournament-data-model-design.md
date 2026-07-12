@@ -178,6 +178,7 @@ fact, not a derived view.
 tournament 1─┬─* division
              ├─* team ──> division?
              ├─* field
+             ├─* field_booking ──> field?, team?   (practice slots, closures)
              ├─* team_group ──> division?
              │        ├─*─ team_group_member ──> team
              │        └─*─ group_ranking ──> team        (confirmed order)
@@ -253,6 +254,22 @@ CREATE TABLE field (
   name          TEXT NOT NULL
 );
 
+-- A reservation of a field for a time range: practice slots, calibration,
+-- maintenance/closure — anything that isn't a match. team_id NULL = non-team
+-- booking ("field closed"). Claims are whole-field; "north half" etc. goes in
+-- notes. The advisory layer warns when overlapping claims can't fit (3+ teams
+-- on one field at once) — never enforced, per the freeform principle.
+CREATE TABLE field_booking (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER NOT NULL REFERENCES tournament(id) ON DELETE CASCADE,
+  field_id      INTEGER REFERENCES field(id) ON DELETE SET NULL,
+  team_id       INTEGER REFERENCES team(id)  ON DELETE SET NULL,
+  label         TEXT NOT NULL DEFAULT '',     -- "practice", "calibration", "closed"
+  starts_at     TEXT,                         -- ISO-8601 datetime
+  ends_at       TEXT,
+  notes         TEXT NOT NULL DEFAULT ''
+);
+
 -- Domain concept: "group" (a round-robin pool). Named team_group because GROUP is
 -- a reserved SQL keyword.
 CREATE TABLE team_group (
@@ -291,19 +308,31 @@ CREATE TABLE match (
   -- cancelled = never happened / won't happen; invalidated = played, result void
   -- (disqualification, score-entry error); suspended = interrupted mid-match
   -- (power/vision failure), partial scores kept, scheduled_at updated to the
-  -- resumption slot. Standings count only 'finished'.
+  -- resumption slot; forfeited = counts like finished but was not (fully) played
+  -- (no-show, walkover, resignation) — distinguishes a real 10:0 from a skipped
+  -- match, so e.g. gamelog validation knows not to expect a log.
+  -- Standings count 'finished' and 'forfeited'.
   status        TEXT NOT NULL DEFAULT 'scheduled'
-                  CHECK (status IN ('scheduled','playing','suspended','finished','cancelled','invalidated')),
+                  CHECK (status IN ('scheduled','playing','suspended','finished','forfeited','cancelled','invalidated')),
 
   -- Duty teams: referee + GC operator, assistant referee + vision operator.
   referee_team_id           INTEGER REFERENCES team(id) ON DELETE SET NULL,
   assistant_referee_team_id INTEGER REFERENCES team(id) ON DELETE SET NULL,
 
   -- Participants (symmetric; slot order is cosmetic). NULL until known/resolved.
-  a_team_id     INTEGER REFERENCES team(id) ON DELETE SET NULL,
-  a_score       INTEGER,
-  b_team_id     INTEGER REFERENCES team(id) ON DELETE SET NULL,
-  b_score       INTEGER,
+  -- Fouls/cards are final per-team counts: *evidence* for score-independent
+  -- results (e.g. Japan Open's fewer-fouls-wins on equal goals) — the decision
+  -- itself is always winner_team_id. Richer stats stay in the event payload.
+  a_team_id      INTEGER REFERENCES team(id) ON DELETE SET NULL,
+  a_score        INTEGER,
+  a_fouls        INTEGER,
+  a_yellow_cards INTEGER,
+  a_red_cards    INTEGER,
+  b_team_id      INTEGER REFERENCES team(id) ON DELETE SET NULL,
+  b_score        INTEGER,
+  b_fouls        INTEGER,
+  b_yellow_cards INTEGER,
+  b_red_cards    INTEGER,
 
   -- Authoritative result. Set for finished matches; handles knockout shootouts where
   -- a_score == b_score but a winner is still decided. NULL + equal scores = a draw
@@ -387,6 +416,8 @@ CREATE TABLE token (
 CREATE INDEX idx_division_tournament  ON division(tournament_id);
 CREATE INDEX idx_team_tournament      ON team(tournament_id);
 CREATE INDEX idx_field_tournament     ON field(tournament_id);
+CREATE INDEX idx_booking_tournament   ON field_booking(tournament_id);
+CREATE INDEX idx_booking_field        ON field_booking(field_id);
 CREATE INDEX idx_group_tournament     ON team_group(tournament_id);
 CREATE INDEX idx_group_member_team    ON team_group_member(team_id);
 CREATE INDEX idx_match_tournament     ON match(tournament_id);
@@ -466,6 +497,20 @@ documented known-strains:
   series/conditional-match entity is not worth its machinery until a real event
   demands it. Walkover cascades and late-arriving teams reduce to existing row ops
   (verified HANDLES).
+
+**Round 3 (committee feedback)** — three deltas:
+
+- **Score-independent winners** (Japan Open: on equal goals, fewer fouls wins) —
+  already supported (`winner_team_id` is decoupled from scores by design); added
+  per-team `fouls` / `yellow_cards` / `red_cards` columns so the *evidence* for
+  such results is visible, not buried in event payloads.
+- **Practice slots** → new `field_booking` table (field + optional team + time
+  range): covers practice, calibration, and field closures alike. Whole-field
+  claims only; "which half" is a note; the advisory layer warns when overlapping
+  claims can't fit. Friendlies were already covered (unwired matches).
+- **"Did it actually happen?"** → `forfeited` status: counts like `finished` but
+  was not (fully) played — a conventional 10:0 walkover is now distinguishable
+  from a real 10:0 (gamelog validation knows not to expect a log).
 
 ## Out of scope for this spec
 
