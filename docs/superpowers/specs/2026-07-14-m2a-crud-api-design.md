@@ -8,14 +8,16 @@ migrations; field names below reference the existing M1 schema
 ## Goal
 
 JSON CRUD endpoints over `net/http` for the 8 planning-domain resources, layered
-`server → manager → store` so a future MCP server can reuse the manager layer
-(structure modeled on ~/projects/tdp_rust: web/mcp transports → api crate → data_access).
+`server → api → store` so a future MCP server can reuse the api layer
+(structure modeled on ~/projects/tdp_rust: web/mcp transports → api crate → data_access;
+`internal/api` is the application's operation set, `internal/server` is one transport
+for it).
 
 Deferred: `event`, `user`, `token` endpoints (M4/M5, where their semantics live).
 
 ## Layering
 
-Dependency direction: `server → manager → store`. Nothing upward.
+Dependency direction: `server → api → store`. Nothing upward.
 
 ```
 internal/
@@ -28,24 +30,29 @@ internal/
     division.go, team.go, field.go, booking.go, group.go, match.go, placement.go
                           # per entity: JSON-tagged row struct + Create/Get/List/Update/Delete
                           # group.go and match.go run their multi-table writes in one tx
-  manager/                # transport-free middle layer; the future MCP seam
-    manager.go            # type Manager struct{ st *store.Store }; func New(*store.Store) *Manager
+  api/                    # transport-free middle layer: the application's operation set;
+                          # the future MCP seam. Like tdp_rust's api crate: NO central
+                          # struct — free functions taking *store.Store as first argument
     errors.go             # type Error{ Code, Message, Field string }; code constants; fromStore(err)
     opt.go                # Opt[T]: the PATCH tri-state (absent / null / value)
     tournament.go … placement.go
                           # per entity: Patch struct, Filter struct, and
-                          #   List(Filter) / Create(Patch) / Get(id) / Update(id, Patch) / Delete(id)
+                          #   ListTeams(st, Filter) / CreateTeam(st, Patch) / GetTeam(st, id) /
+                          #   UpdateTeam(st, id, Patch) / DeleteTeam(st, id)  (etc. per entity)
                           # match.go + group.go define the composite JSON views
   server/                 # HTTP transport only; handlers contain no logic
-    server.go             # (exists) NewMux(st *store.Store, mgr *manager.Manager); Run(...)
+    server.go             # (exists) NewMux(st *store.Store) unchanged; Run(...)
     routes.go             # every route registration, Go 1.22 method patterns
     respond.go            # decode() (strict JSON), writeJSON(), writeError() (code → HTTP status)
+    openapi.yaml          # hand-written OpenAPI 3 spec (embedded; see API docs section)
     tournament.go … placement.go   # one file per resource, 5 thin handlers each
 ```
 
-No interfaces (one store, one manager — a consumer can define its own interface later).
-No DTO package: store row structs carry the JSON tags and are returned directly; only
-match and group get view structs in `manager` because their wire shape spans tables.
+No interfaces (one concrete store — a consumer can define its own interface later).
+No central struct in `api` (tdp_rust convention: operations are free functions; nothing
+accretes into a god object as M3–M5 add operations). No DTO package: store row structs
+carry the JSON tags and are returned directly; only match and group get view structs in
+`api` because their wire shape spans tables.
 
 ## API conventions
 
@@ -69,7 +76,7 @@ Resource path names: `tournaments`, `divisions`, `teams`, `fields`, `field-booki
   the sub-row, for composites); key with value = set. Implemented once as
   `Opt[T] struct{ Set, Null bool; Value T }` with a custom `UnmarshalJSON`
   (`json` only calls it when the key is present; `null` sets both flags).
-- **POST** decodes into the same Patch struct applied to a zero row. The manager fills
+- **POST** decodes into the same Patch struct applied to a zero row. The `api` layer fills
   the schema's non-trivial defaults for absent fields (`field_booking.kind = "booking"`,
   `match.status = "scheduled"`); NOT NULL text columns default to `""` (Go zero value).
   INSERT/UPDATE statements are static, name every column except `id`/`created_at`
@@ -121,7 +128,7 @@ unknown-field error → UNKNOWN_FIELD + field.
 The API rejects **only** what the database rejects: enum vocabulary (CHECK), NOT NULL,
 and dangling FKs. No name uniqueness, no "team can't play itself", no overlap checks,
 no cross-field consistency on source references (a `group_rank` source carrying a
-`match_id` is legal data). Handlers and managers contain zero business-rule validation.
+`match_id` is legal data). Neither handlers nor `api` functions contain business-rule validation.
 The advisory warnings layer is M3+ and never blocks writes.
 
 ## Resource shapes
@@ -194,9 +201,11 @@ reference, not a repeating sub-structure.)
 
 Hand-written OpenAPI 3 spec, served by the binary:
 
-- `api/openapi.yaml` — the spec, written by hand. The API's uniformity keeps it
-  compact: shared `$ref` components for the error envelope, per-resource schemas,
-  and the 5-verb pattern.
+- `internal/server/openapi.yaml` — the spec, written by hand (it lives in `server`
+  because it documents the HTTP transport and is embedded from there; not to be
+  confused with the `internal/api` package). The API's uniformity keeps it compact:
+  shared `$ref` components for the error envelope, per-resource schemas, and the
+  5-verb pattern.
 - `GET /api/openapi.yaml` — serves the spec file (embedded via `go:embed`).
 - `GET /api/docs` — Swagger UI, its static assets vendored into the repo
   (from the `swagger-ui-dist` package, fetched through the configured package sources
@@ -211,19 +220,22 @@ Hand-written OpenAPI 3 spec, served by the binary:
 `PATCH /api/teams/5` body `{"name":"RTT","division_id":null}`:
 
 1. `routes.go`: `mux.HandleFunc("PATCH /api/teams/{id}", h.patchTeam)`.
-2. `server/team.go`: parse id, `decode(r, &patch)` (strict), call `mgr.UpdateTeam(5, patch)`.
-3. `manager/team.go`: `st.GetTeam(5)` (miss → NOT_FOUND); apply patch onto the row
+2. `server/team.go`: parse id, `decode(r, &patch)` (strict), call `api.UpdateTeam(h.st, 5, patch)`.
+3. `api/team.go`: `st.GetTeam(5)` (miss → NOT_FOUND); apply patch onto the row
    (`Name.Set` → overwrite; `DivisionID.Set && Null` → nil; absent → untouched);
-   `st.UpdateTeam(row)`; map store errors via `fromStore`.
+   `st.UpdateTeam(row)`; map store errors via `fromStore`. (Store keeps M1's
+   method-on-`*Store` style; only the `api` layer uses free functions.)
 4. `store/team.go`: full-row `UPDATE team SET … WHERE id=?`; errors through `translate()`.
 5. Handler: `writeJSON(w, 200, team)` or `writeError(w, err)`.
 
-POST is the same with a zero base row → 201. The wiring in `cmd/ssl-tournament/main.go`
-becomes: `store.Open → manager.New(st) → server.Run(…, st, mgr)`.
+POST is the same with a zero base row → 201. Wiring in `cmd/ssl-tournament/main.go` is
+unchanged: `store.Open → server.Run(…, st)` — handlers hold the store and pass it to
+`api` functions. A future MCP server constructs the same store and calls the same
+`api` functions.
 
 ## Testing
 
-- Shared harness: `newTestServer(t)` = temp-dir store + manager + `NewMux`, driven via
+- Shared harness: `newTestServer(t)` = temp-dir store + `NewMux`, driven via
   `httptest`. Never `:memory:`.
 - Per resource: full CRUD cycle; PATCH tri-state (absent kept, null cleared, value set);
   list filters filter and unknown params reject.
@@ -233,12 +245,12 @@ becomes: `store.Open → manager.New(st) → server.Run(…, st, mgr)`.
   replace; ranking ties accepted.
 - Freeform tests at the API level: duplicate names, team vs itself, match on a blocked
   field, `group_rank` source carrying a `match_id` — all 2xx.
-- Manager `Opt[T]` unit tests (absent/null/value decode) — the one piece of real
+- `api.Opt[T]` unit tests (absent/null/value decode) — the one piece of real
   mechanism.
 
 ## Out of scope (M2a)
 
 Auth (M5), events endpoint (M4), any resolution/standings logic and advisory warnings
 (M3), pagination (lists are tournament-sized), the wizard UI (M2b), MCP server (the
-manager layer is the seam; nothing is built for it now), schema-level OpenAPI drift
+`internal/api` layer is the seam; nothing is built for it now), schema-level OpenAPI drift
 tooling beyond the route-sync test (revisit when contributors join).
