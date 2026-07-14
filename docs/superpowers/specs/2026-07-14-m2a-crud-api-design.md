@@ -36,9 +36,12 @@ internal/
     errors.go             # type Error{ Code, Message, Field string }; code constants; fromStore(err)
     opt.go                # Opt[T]: the PATCH tri-state (absent / null / value)
     tournament.go … placement.go
-                          # per entity: Patch struct, Filter struct, and
-                          #   ListTeams(st, Filter) / CreateTeam(st, Patch) / GetTeam(st, id) /
-                          #   UpdateTeam(st, id, Patch) / DeleteTeam(st, id)  (etc. per entity)
+                          # per entity: Patch struct and
+                          #   ListTeams(dataStore, store.TeamFilter) / CreateTeam(dataStore, Patch) /
+                          #   GetTeam(dataStore, id) / UpdateTeam(dataStore, id, Patch) /
+                          #   DeleteTeam(dataStore, id)  (etc. per entity)
+                          # Filter structs live in store (they parameterize its SQL);
+                          # api passes them through
                           # match.go + group.go define the composite JSON views
   server/                 # HTTP transport only; handlers contain no logic
     server.go             # (exists) NewMux(st *store.Store) unchanged; Run(...)
