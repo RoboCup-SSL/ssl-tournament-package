@@ -4,7 +4,7 @@ The *what/why* is in [architecture.md](architecture.md); this is the **build ord
 milestone leaves a runnable binary. Mirror `ssl-game-controller`
 (https://github.com/RoboCup-SSL/ssl-game-controller) for the embed + release patterns.
 
-## Milestone 0 — running skeleton
+## Milestone 0 — running skeleton — **done**
 - `go mod init github.com/RoboCup-SSL/ssl-tournament-package`
 - `cmd/ssl-tournament/main.go`: stdlib `net/http` server with flags (`--host`, `--port`).
 - `frontend/dist/` placeholder + a `frontend/embed.go` (`//go:embed dist`) serving it at `/`
@@ -13,13 +13,14 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
 - **Goal:** `go build` → one binary that runs and serves a page. Distribution proven before
   any real logic.
 
-## Milestone 1 — data layer
+## Milestone 1 — data layer — **done**
 - SQLite via `modernc.org/sqlite` (pure-Go, keeps cross-compile trivial).
 - Data dir via `os.UserConfigDir()` (never next to the binary); open/create `tournament.db`.
 - Schema + simple migrations. Core tables: `teams`, `tournaments`, `matches`, `assignments`,
   `events`, `tokens` (fields per architecture.md's Auth + Event-flow sections).
 
 ## Milestone 2 — core API + wizard UI
+- **M2a (API): done** — see docs/superpowers/specs/2026-07-14-m2a-crud-api-design.md; Swagger UI at /api/docs.
 - JSON CRUD for teams / tournament / format.
 - Mobile-first wizard frontend built to `dist/`, embedded.
   Flow: welcome → where/when → fields → teams → format → run.
