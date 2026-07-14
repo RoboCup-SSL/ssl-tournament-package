@@ -214,8 +214,8 @@ Hand-written OpenAPI 3 spec, served by the binary:
   5-verb pattern.
 - `GET /api/openapi.yaml` — serves the spec file (embedded via `go:embed`).
 - `GET /api/docs` — Swagger UI, its static assets vendored into the repo
-  (from the `swagger-ui-dist` package, fetched through the configured package sources
-  registry) and embedded in the binary. Self-contained; no CDN.
+  (from the `swagger-ui-dist` npm package) and embedded in the binary.
+  Self-contained; no CDN.
 - **Drift guard:** a test walks every route registered in `routes.go` and asserts
   the same method+path exists in `openapi.yaml` (and vice versa). Catches the real
   failure mode — a forgotten or renamed endpoint. Deeper safeguards (schema-level
