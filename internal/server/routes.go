@@ -58,6 +58,11 @@ func (h *handlers) routes() []route {
 		{"GET", "/api/groups/{id}", h.getGroup},
 		{"PATCH", "/api/groups/{id}", h.patchGroup},
 		{"DELETE", "/api/groups/{id}", h.deleteGroup},
+		{"GET", "/api/matches", h.listMatches},
+		{"POST", "/api/matches", h.createMatch},
+		{"GET", "/api/matches/{id}", h.getMatch},
+		{"PATCH", "/api/matches/{id}", h.patchMatch},
+		{"DELETE", "/api/matches/{id}", h.deleteMatch},
 	}
 }
 
