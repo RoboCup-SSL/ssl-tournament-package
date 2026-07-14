@@ -17,7 +17,7 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
 - SQLite via `modernc.org/sqlite` (pure-Go, keeps cross-compile trivial).
 - Data dir via `os.UserConfigDir()` (never next to the binary); open/create `tournament.db`.
 - Schema + simple migrations. Core tables: `teams`, `tournaments`, `matches`, `assignments`,
-  `events`, `users`, `tokens` (fields per architecture.md's Auth + Event-flow sections).
+  `events`, `tokens` (fields per architecture.md's Auth + Event-flow sections).
 
 ## Milestone 2 — core API + wizard UI
 - JSON CRUD for teams / tournament / format.
@@ -40,8 +40,11 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
   **reject** discards. Keep handlers explicit + testable. Pending log = audit trail.
 
 ## Milestone 5 — auth
-- Session login + roles (`organizer` edit/approve, `viewer` read-only), `bcrypt`, signed
-  cookie. Producer `tokens` table for `/events`. (Teams get no write access by design.)
+- Per-tournament tokens, no user accounts (spec round 4): tournament creation returns its
+  first **admin token**; organizers mint/revoke named admin tokens for each other; **producer
+  tokens** authorize `POST /events`. Reads stay public. (Teams get no write access by design.)
+- Recovery: CLI reset on the host now; an instance-admin reset endpoint once hosted 24/7;
+  email self-service later via `tournament.contact_email`.
 
 ## Milestone 6 — release & run
 - CI cross-compile (`GOOS/GOARCH`: linux amd64/arm64/arm, darwin amd64/arm64, windows

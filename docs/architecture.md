@@ -47,7 +47,8 @@ stays Python; this one stands alone and shares no code).
   **embedded via `//go:embed`** — served by the same binary alongside the JSON API.
 - **Datastore:** SQLite via a **pure-Go driver (`modernc.org/sqlite`)** — no cgo, so
   cross-compilation stays trivial. Single file = whole tournament.
-- **Passwords:** `golang.org/x/crypto/bcrypt`; sessions via a signed cookie.
+- **Auth:** per-tournament bearer tokens (high-entropy, stored hashed) — no user
+  accounts, passwords, or sessions.
 - **Releases:** git tag → CI cross-compiles → GitHub Releases (`ghr`) + optional multi-arch
   Docker image, mirroring ssl-game-controller.
 
@@ -98,18 +99,27 @@ unreliable (off-schedule matches, wrong-match guesses). A person confirms before
 
 ## Auth & permissions
 
-Two distinct needs — keep both **simple** (no OAuth/SSO):
+No user accounts (revised 2026-07-14; supersedes the earlier users/roles/bcrypt
+design — see the data-model spec, auth round 4). One `token` table, rows scoped to
+a tournament, stored hashed, individually revocable:
 
-**Human users — session login with roles.**
-- `organizer/admin`: edit everything, approve/reject events.
-- `viewer` (default, incl. teams & public): **read-only** — view schedule/standings, nothing else.
-- (later, optional) `scorer/referee`: submit results for their assigned matches only.
-- Small `users` table, `bcrypt`-hashed passwords, signed session cookie.
-- → Teams **cannot** touch the schedule because they simply have no write access.
+**Everyone — public reads.** Schedule and standings are visible without any login;
+the old `viewer` role was only ever "no write access".
 
-**Machine producers — revocable API tokens.**
-- A `tokens` table (name, hashed token, scope); sent as `Authorization: Bearer <token>` on
-  `POST /events`. Each event attributed to its producer.
+**Organizers — admin tokens.** Creating a tournament returns its first admin token.
+Sharing access = minting another *named* token ("Nicolai", "stream crew") — each
+revocable on its own, and the audit trail records which token acted. The browser
+keeps the token after one paste. Teams **cannot** touch the schedule because
+writes require an admin token they don't have.
+
+**Machine producers — producer tokens**, also per tournament; sent as
+`Authorization: Bearer <token>` on `POST /events`. Each event attributed to its
+producer, and a leaked token can only spam that one tournament's pending queue.
+
+**Token recovery**, in order of deployment reality: reset via CLI on the host
+(venue/desktop runs) → an instance-admin reset endpoint (hosted 24/7 for many
+organizers) → email self-service (later; `tournament.contact_email` is collected
+from creation so the address exists before the mechanism does).
 
 **Key security property:** a producer token *only* lets you create **pending** events —
 nothing a producer sends changes the tournament until an organizer approves it. So a

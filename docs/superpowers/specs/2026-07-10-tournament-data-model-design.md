@@ -1,6 +1,6 @@
 # Tournament data model — design
 
-- **Date:** 2026-07-10 (revised 2026-07-12)
+- **Date:** 2026-07-10 (revised 2026-07-14)
 - **Status:** draft for review
 - **Milestone:** M1 (data layer). Domain *logic* (standings computation, reference
   resolution, round-robin generation, ref suggestions, validation) is M3; this spec
@@ -186,8 +186,9 @@ tournament 1─┬─* division
              │      ├──> team (a/b resolved, winner, referee, assistant referee)
              │      └─*─ slot_source ──> team_group | match  (bracket wiring)
              ├─* placement ──> division?, match, team
-             └─* event ──> match?, user?
-user, token   (instance-global auth; not tournament-scoped)
+             ├─* event ──> match?, token?
+             └─* token    (kind: admin = organizer writes | producer = /events;
+                           tournament_id NULL = instance-wide operator tooling)
 ```
 
 ## SQL schema (SQLite)
@@ -220,6 +221,10 @@ CREATE TABLE tournament (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL,
   location   TEXT NOT NULL DEFAULT '',
+  -- Creator/organizer contact, collected at creation. Doubles as the future
+  -- self-service token-recovery address; no email sending is built until that
+  -- recovery tier is actually needed (see auth round 4).
+  contact_email TEXT NOT NULL DEFAULT '',
   starts_on  TEXT,                        -- ISO-8601 date, nullable
   ends_on    TEXT,
   -- Daily venue hours, HH:MM local, nullable. Advisory warns about matches/
@@ -406,26 +411,23 @@ CREATE TABLE event (
                   CHECK (status IN ('pending','approved','rejected')),
   received_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   resolved_at   TEXT,
-  resolved_by   INTEGER REFERENCES user(id) ON DELETE SET NULL
+  resolved_by   INTEGER REFERENCES token(id) ON DELETE SET NULL  -- admin token that approved/rejected
 );
 
--- Instance-global auth (not tournament-scoped).
-CREATE TABLE user (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  username      TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,                   -- bcrypt
-  role          TEXT NOT NULL DEFAULT 'viewer'
-                  CHECK (role IN ('organizer','viewer')),
-  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
-
+-- Auth (round 4): no user accounts. Reads are public; writes require one of the
+-- tournament's admin tokens; external producers POST /events with a producer
+-- token. Creating a tournament yields its first admin token; organizers mint
+-- further named tokens ("Nicolai", "stream crew") and revoke each independently,
+-- so a leak or a departing crew member never forces rotating a shared secret.
+-- tournament_id NULL = instance-wide (operator tooling: backups, token resets).
 CREATE TABLE token (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,               -- hashed bearer token
-  scope      TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-  revoked_at TEXT
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER REFERENCES tournament(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL CHECK (kind IN ('admin','producer')),
+  name          TEXT NOT NULL,
+  token_hash    TEXT NOT NULL UNIQUE,             -- hashed bearer token
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  revoked_at    TEXT
 );
 
 -- Indexes (SQLite does not auto-index foreign keys).
@@ -444,6 +446,7 @@ CREATE INDEX idx_slot_source_match    ON slot_source(ref_match_id);
 CREATE INDEX idx_placement_tournament ON placement(tournament_id);
 CREATE INDEX idx_event_status         ON event(status);
 CREATE INDEX idx_event_tournament     ON event(tournament_id);
+CREATE INDEX idx_token_tournament     ON token(tournament_id);
 ```
 
 ## How the example maps (2026 Incheon Div B)
@@ -542,6 +545,27 @@ documented known-strains:
   supported; the choice is per-ruleset). Team self-service practice booking is a
   later API/auth feature — `field_booking` (team + start/stop) already suffices
   as the record.
+
+**Round 4 (auth simplification, 2026-07-14)** — the planned M5 users/roles design
+is superseded by per-tournament tokens:
+
+- **No user accounts.** Reads are public (the old `viewer` role was only ever "no
+  write access"); writes require one of the tournament's **admin tokens**; external
+  producers keep **producer tokens**. The `user` table is gone; `event.resolved_by`
+  now points at the token used.
+- **Sharing = minting.** The creator receives the tournament's first admin token
+  and mints named, individually-revocable tokens for co-organizers instead of
+  forwarding a master secret. The audit trail names the token, not "an organizer".
+- **Per-tournament scoping** makes unrelated tournaments safe on one shared 24/7
+  instance (nothing instance-global grants cross-tournament writes) and shrinks a
+  leaked producer token's blast radius to one tournament's pending queue.
+- **Recovery ladder**, in order of deployment reality: token reset via CLI on the
+  host (venue/desktop runs) → an instance-admin reset endpoint (hosted 24/7 for
+  many organizers) → email self-service (later, via `tournament.contact_email`,
+  which is collected from day one; no email *sending* is built until that tier).
+- **Implementation status:** shipped migration 0001 still has the round-3
+  `user`/`token` shape. This revision lands as a follow-up migration —
+  `tournament.contact_email` with M2's tournament API, the token rework by M5.
 
 ## Out of scope for this spec
 
