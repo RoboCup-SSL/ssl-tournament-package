@@ -36,3 +36,17 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // Ping verifies the database is reachable.
 func (s *Store) Ping() error { return s.db.Ping() }
+
+// inTx runs operation inside a transaction, committing on success and rolling
+// back on error.
+func (s *Store) inTx(operation func(*sql.Tx) error) error {
+	transaction, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := operation(transaction); err != nil {
+		transaction.Rollback()
+		return err
+	}
+	return transaction.Commit()
+}
