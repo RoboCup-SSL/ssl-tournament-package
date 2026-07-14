@@ -85,8 +85,11 @@ Resource path names: `tournaments`, `divisions`, `teams`, `fields`, `field-booki
   INSERT/UPDATE statements are static, name every column except `id`/`created_at`
   (the DB fills `created_at`). No dynamic SQL.
 - Unknown body fields are rejected (`DisallowUnknownFields`). Unknown query
-  parameters are rejected the same way (UNKNOWN_FIELD) — typos must not silently
-  return unfiltered lists.
+  parameters are rejected the same way (UNKNOWN_FIELD) on list endpoints — typos
+  must not silently return unfiltered lists. Known accepted limitation: strict
+  rejection applies to top-level keys only; unknown keys nested inside composite
+  sub-objects (`a_source`/`b_source`, `ranking` entries) are silently ignored,
+  because Go's strict decoding does not reach inside custom unmarshalers.
 - A non-integer `{id}` path value or filter value is INVALID_VALUE.
 
 ### List filters
