@@ -28,6 +28,21 @@ func (h *handlers) routes() []route {
 		{"GET", "/api/tournaments/{id}", h.getTournament},
 		{"PATCH", "/api/tournaments/{id}", h.patchTournament},
 		{"DELETE", "/api/tournaments/{id}", h.deleteTournament},
+		{"GET", "/api/divisions", h.listDivisions},
+		{"POST", "/api/divisions", h.createDivision},
+		{"GET", "/api/divisions/{id}", h.getDivision},
+		{"PATCH", "/api/divisions/{id}", h.patchDivision},
+		{"DELETE", "/api/divisions/{id}", h.deleteDivision},
+		{"GET", "/api/teams", h.listTeams},
+		{"POST", "/api/teams", h.createTeam},
+		{"GET", "/api/teams/{id}", h.getTeam},
+		{"PATCH", "/api/teams/{id}", h.patchTeam},
+		{"DELETE", "/api/teams/{id}", h.deleteTeam},
+		{"GET", "/api/fields", h.listFields},
+		{"POST", "/api/fields", h.createField},
+		{"GET", "/api/fields/{id}", h.getField},
+		{"PATCH", "/api/fields/{id}", h.patchField},
+		{"DELETE", "/api/fields/{id}", h.deleteField},
 	}
 }
 
