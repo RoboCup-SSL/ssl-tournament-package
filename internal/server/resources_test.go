@@ -107,3 +107,54 @@ func TestFieldCRUD(t *testing.T) {
 		map[string]any{"name": "Field 2 (renamed)"})
 	filterCount(t, testServer, "/api/fields?tournament_id=1", 1)
 }
+
+func TestFieldBookingCRUD(t *testing.T) {
+	testServer := newTestServer(t)
+	seedBase(t, testServer)
+	status, body := doRequest(t, testServer, "POST", "/api/field-bookings",
+		`{"tournament_id": 1, "field_id": 1, "team_id": 1, "label": "practice",
+		  "starts_at": "2026-07-15T09:00:00Z", "ends_at": "2026-07-15T10:00:00Z"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create booking: %d %s", status, body)
+	}
+	if kind := asObject(t, body)["kind"]; kind != "booking" {
+		t.Errorf("default kind: got %v, want booking", kind)
+	}
+	exerciseCRUD(t, testServer, "/api/field-bookings",
+		`{"tournament_id": 1, "field_id": 1, "kind": "blocked", "label": "venue closed"}`,
+		`{"team_id": null, "notes": "power outage"}`,
+		map[string]any{"kind": "blocked", "team_id": nil, "notes": "power outage"})
+	filterCount(t, testServer, "/api/field-bookings?field_id=1", 1)
+	filterCount(t, testServer, "/api/field-bookings?team_id=1", 1)
+	status, body = doRequest(t, testServer, "POST", "/api/field-bookings",
+		`{"tournament_id": 1, "kind": "party"}`)
+	if status != http.StatusBadRequest || errorCode(t, body) != "INVALID_VALUE" {
+		t.Errorf("bad kind enum: %d %s", status, body)
+	}
+}
+
+func TestPlacementCRUD(t *testing.T) {
+	testServer := newTestServer(t)
+	seedBase(t, testServer)
+	exerciseCRUD(t, testServer, "/api/placements",
+		`{"tournament_id": 1, "division_id": 1, "rank": 1, "label": "Champion",
+		  "source_kind": "match_winner", "resolved_team_id": 1}`,
+		`{"resolved_team_id": 2, "source_kind": null}`,
+		map[string]any{"rank": float64(1), "resolved_team_id": float64(2), "source_kind": nil})
+	filterCount(t, testServer, "/api/placements?division_id=1", 0)
+	status, body := doRequest(t, testServer, "POST", "/api/placements",
+		`{"tournament_id": 1, "rank": 3, "source_kind": "coin_toss"}`)
+	if status != http.StatusBadRequest || errorCode(t, body) != "INVALID_VALUE" {
+		t.Errorf("bad source_kind enum: %d %s", status, body)
+	}
+	status, body = doRequest(t, testServer, "POST", "/api/placements",
+		`{"tournament_id": 1, "rank": 3}`)
+	if status != http.StatusCreated {
+		t.Fatalf("second rank-3 placement: %d %s", status, body)
+	}
+	status, body = doRequest(t, testServer, "POST", "/api/placements",
+		`{"tournament_id": 1, "rank": 3, "label": "shared third"}`)
+	if status != http.StatusCreated {
+		t.Errorf("shared placements must be legal: %d %s", status, body)
+	}
+}
