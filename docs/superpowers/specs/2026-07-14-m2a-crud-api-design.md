@@ -1,7 +1,9 @@
 # M2a — JSON CRUD API design
 
 Status: settled 2026-07-14. Builds on the data-model spec
-(2026-07-10-tournament-data-model-design.md); schema is `internal/store/migrations/0001_init.sql`.
+(2026-07-10-tournament-data-model-design.md). **No schema changes** — M2a adds no
+migrations; field names below reference the existing M1 schema
+(`internal/store/migrations/0001_init.sql`) as-is.
 
 ## Goal
 
@@ -188,6 +190,22 @@ reference, not a repeating sub-structure.)
 - Ties in `ranking` are legal (freeform); duplicate team_ids in a submitted list are a
   PK violation → INVALID_VALUE.
 
+## API docs (Swagger)
+
+Hand-written OpenAPI 3 spec, served by the binary:
+
+- `api/openapi.yaml` — the spec, written by hand. The API's uniformity keeps it
+  compact: shared `$ref` components for the error envelope, per-resource schemas,
+  and the 5-verb pattern.
+- `GET /api/openapi.yaml` — serves the spec file (embedded via `go:embed`).
+- `GET /api/docs` — Swagger UI, its static assets vendored into the repo
+  (from the `swagger-ui-dist` package, fetched through the configured package sources
+  registry) and embedded in the binary. Self-contained; no CDN.
+- **Drift guard:** a test walks every route registered in `routes.go` and asserts
+  the same method+path exists in `openapi.yaml` (and vice versa). Catches the real
+  failure mode — a forgotten or renamed endpoint. Deeper safeguards (schema-level
+  contract checks in CI) are deferred until more people contribute.
+
 ## Request flow (reference trace)
 
 `PATCH /api/teams/5` body `{"name":"RTT","division_id":null}`:
@@ -222,4 +240,5 @@ becomes: `store.Open → manager.New(st) → server.Run(…, st, mgr)`.
 
 Auth (M5), events endpoint (M4), any resolution/standings logic and advisory warnings
 (M3), pagination (lists are tournament-sized), the wizard UI (M2b), MCP server (the
-manager layer is the seam; nothing is built for it now).
+manager layer is the seam; nothing is built for it now), schema-level OpenAPI drift
+tooling beyond the route-sync test (revisit when contributors join).
