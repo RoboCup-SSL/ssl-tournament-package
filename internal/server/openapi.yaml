@@ -1,0 +1,475 @@
+openapi: 3.0.3
+info:
+  title: ssl-tournament API
+  description: >
+    Tournament management for RoboCup SSL. The API is freeform: it stores what
+    you send and rejects only unknown fields, vocabulary violations, and
+    references to rows that do not exist. Consistency warnings are a later,
+    advisory feature — never a write block.
+  version: 0.2.0
+tags:
+  - {name: tournaments}
+  - {name: divisions}
+  - {name: teams}
+  - {name: fields}
+  - {name: field-bookings}
+  - {name: groups}
+  - {name: matches}
+  - {name: placements}
+
+paths:
+  /api/tournaments:
+    get:
+      tags: [tournaments]
+      summary: List tournaments
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Tournament'}}}}}
+    post:
+      tags: [tournaments]
+      summary: Create a tournament
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Tournament'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Tournament'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/tournaments/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [tournaments]
+      summary: Get a tournament
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Tournament'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [tournaments]
+      summary: Update a tournament (partial; absent = unchanged, null = clear)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Tournament'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Tournament'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [tournaments]
+      summary: Delete a tournament and everything it owns
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/divisions:
+    get:
+      tags: [divisions]
+      summary: List divisions
+      parameters: [{$ref: '#/components/parameters/tournament_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Division'}}}}}
+    post:
+      tags: [divisions]
+      summary: Create a division
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Division'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Division'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/divisions/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [divisions]
+      summary: Get a division
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Division'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [divisions]
+      summary: Update a division (partial)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Division'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Division'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [divisions]
+      summary: Delete a division (references to it become null)
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/teams:
+    get:
+      tags: [teams]
+      summary: List teams
+      parameters: [{$ref: '#/components/parameters/tournament_id'}, {$ref: '#/components/parameters/division_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Team'}}}}}
+    post:
+      tags: [teams]
+      summary: Create a team
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Team'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Team'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/teams/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [teams]
+      summary: Get a team
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Team'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [teams]
+      summary: Update a team (partial; withdraw by setting withdrawn_at)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Team'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Team'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [teams]
+      summary: Delete a team (prefer withdrawing once it has history)
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/fields:
+    get:
+      tags: [fields]
+      summary: List fields
+      parameters: [{$ref: '#/components/parameters/tournament_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Field'}}}}}
+    post:
+      tags: [fields]
+      summary: Create a field
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Field'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Field'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/fields/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [fields]
+      summary: Get a field
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Field'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [fields]
+      summary: Update a field (partial)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Field'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Field'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [fields]
+      summary: Delete a field (matches and bookings pointing at it keep running with field null)
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/field-bookings:
+    get:
+      tags: [field-bookings]
+      summary: List field bookings (practice slots and blocked windows)
+      parameters: [{$ref: '#/components/parameters/tournament_id'}, {$ref: '#/components/parameters/field_id'}, {$ref: '#/components/parameters/team_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/FieldBooking'}}}}}
+    post:
+      tags: [field-bookings]
+      summary: Create a field booking (kind defaults to booking)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FieldBooking'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/FieldBooking'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/field-bookings/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [field-bookings]
+      summary: Get a field booking
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/FieldBooking'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [field-bookings]
+      summary: Update a field booking (partial)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FieldBooking'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/FieldBooking'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [field-bookings]
+      summary: Delete a field booking
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/groups:
+    get:
+      tags: [groups]
+      summary: List groups with their members and rankings
+      parameters: [{$ref: '#/components/parameters/tournament_id'}, {$ref: '#/components/parameters/division_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Group'}}}}}
+    post:
+      tags: [groups]
+      summary: Create a group (member_team_ids and ranking optional)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Group'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Group'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/groups/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [groups]
+      summary: Get a group with its members and ranking
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Group'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [groups]
+      summary: Update a group (partial; member_team_ids and ranking replace wholesale)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Group'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Group'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [groups]
+      summary: Delete a group (its matches cascade away)
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/matches:
+    get:
+      tags: [matches]
+      summary: List matches with their slot sources
+      parameters: [{$ref: '#/components/parameters/tournament_id'}, {$ref: '#/components/parameters/division_id'}, {$ref: '#/components/parameters/group_id'}, {$ref: '#/components/parameters/field_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Match'}}}}}
+    post:
+      tags: [matches]
+      summary: Create a match (a_source/b_source wire the bracket)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Match'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Match'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/matches/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [matches]
+      summary: Get a match with its slot sources
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Match'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [matches]
+      summary: Update a match (partial; a_source/b_source replace wholesale, null deletes them)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Match'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Match'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [matches]
+      summary: Delete a match
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /api/placements:
+    get:
+      tags: [placements]
+      summary: List placements (final standings entries)
+      parameters: [{$ref: '#/components/parameters/tournament_id'}, {$ref: '#/components/parameters/division_id'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Placement'}}}}}
+    post:
+      tags: [placements]
+      summary: Create a placement (shared ranks are legal)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/placements/{id}:
+    parameters: [{$ref: '#/components/parameters/id'}]
+    get:
+      tags: [placements]
+      summary: Get a placement
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [placements]
+      summary: Update a placement (partial)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [placements]
+      summary: Delete a placement
+      responses:
+        '204': {description: Deleted}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+components:
+  parameters:
+    id: {name: id, in: path, required: true, schema: {type: integer}}
+    tournament_id: {name: tournament_id, in: query, schema: {type: integer}}
+    division_id: {name: division_id, in: query, schema: {type: integer}}
+    group_id: {name: group_id, in: query, schema: {type: integer}}
+    field_id: {name: field_id, in: query, schema: {type: integer}}
+    team_id: {name: team_id, in: query, schema: {type: integer}}
+  responses:
+    BadRequest:
+      description: Invalid JSON, unknown field, or invalid value
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: No row with that id
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Conflict:
+      description: A reference points at a row that does not exist
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: {type: string, enum: [INVALID_JSON, UNKNOWN_FIELD, INVALID_VALUE, NOT_FOUND, MISSING_REFERENCE, INTERNAL]}
+            message: {type: string}
+            field: {type: string}
+    Tournament:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        name: {type: string}
+        location: {type: string}
+        starts_on: {type: string, nullable: true, description: ISO-8601 date}
+        ends_on: {type: string, nullable: true}
+        venue_opens: {type: string, nullable: true, description: 'HH:MM local'}
+        venue_closes: {type: string, nullable: true}
+        default_match_minutes: {type: integer, nullable: true}
+        default_gap_minutes: {type: integer, nullable: true}
+        created_at: {type: string, readOnly: true}
+    Division:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        name: {type: string}
+        notes: {type: string}
+    Team:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        division_id: {type: integer, nullable: true}
+        name: {type: string}
+        country: {type: string}
+        contact: {type: string}
+        notes: {type: string}
+        withdrawn_at: {type: string, nullable: true}
+        created_at: {type: string, readOnly: true}
+    Field:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        name: {type: string}
+    FieldBooking:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        field_id: {type: integer, nullable: true}
+        team_id: {type: integer, nullable: true}
+        kind: {type: string, enum: [booking, blocked]}
+        label: {type: string}
+        starts_at: {type: string, nullable: true}
+        ends_at: {type: string, nullable: true}
+        notes: {type: string}
+    GroupRank:
+      type: object
+      properties:
+        team_id: {type: integer}
+        rank: {type: integer}
+    Group:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        division_id: {type: integer, nullable: true}
+        name: {type: string}
+        notes: {type: string}
+        ranking_confirmed_at: {type: string, nullable: true}
+        member_team_ids: {type: array, items: {type: integer}}
+        ranking: {type: array, items: {$ref: '#/components/schemas/GroupRank'}}
+    SlotSource:
+      type: object
+      nullable: true
+      properties:
+        kind: {type: string, enum: [group_rank, match_winner, match_loser]}
+        group_id: {type: integer, nullable: true}
+        rank: {type: integer, nullable: true}
+        match_id: {type: integer, nullable: true}
+    Match:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        division_id: {type: integer, nullable: true}
+        group_id: {type: integer, nullable: true}
+        label: {type: string}
+        field_id: {type: integer, nullable: true}
+        scheduled_at: {type: string, nullable: true}
+        duration_minutes: {type: integer, nullable: true}
+        status: {type: string, enum: [scheduled, playing, suspended, finished, forfeited, cancelled, invalidated]}
+        referee_team_id: {type: integer, nullable: true}
+        assistant_referee_team_id: {type: integer, nullable: true}
+        a_team_id: {type: integer, nullable: true}
+        a_score: {type: integer, nullable: true}
+        a_fouls: {type: integer, nullable: true}
+        a_yellow_cards: {type: integer, nullable: true}
+        a_red_cards: {type: integer, nullable: true}
+        b_team_id: {type: integer, nullable: true}
+        b_score: {type: integer, nullable: true}
+        b_fouls: {type: integer, nullable: true}
+        b_yellow_cards: {type: integer, nullable: true}
+        b_red_cards: {type: integer, nullable: true}
+        winner_team_id: {type: integer, nullable: true}
+        notes: {type: string}
+        created_at: {type: string, readOnly: true}
+        a_source: {$ref: '#/components/schemas/SlotSource'}
+        b_source: {$ref: '#/components/schemas/SlotSource'}
+    Placement:
+      type: object
+      properties:
+        id: {type: integer, readOnly: true}
+        tournament_id: {type: integer}
+        division_id: {type: integer, nullable: true}
+        rank: {type: integer}
+        label: {type: string}
+        source_kind: {type: string, nullable: true, enum: [group_rank, match_winner, match_loser, null]}
+        source_group_id: {type: integer, nullable: true}
+        source_rank: {type: integer, nullable: true}
+        source_match_id: {type: integer, nullable: true}
+        resolved_team_id: {type: integer, nullable: true}

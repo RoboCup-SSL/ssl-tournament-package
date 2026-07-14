@@ -21,6 +21,7 @@ func NewMux(dataStore *store.Store) *http.ServeMux {
 		_, _ = w.Write([]byte("ok"))
 	})
 	register(mux, &handlers{dataStore: dataStore})
+	registerDocs(mux)
 	mux.Handle("/", frontend.Handler())
 	return mux
 }
