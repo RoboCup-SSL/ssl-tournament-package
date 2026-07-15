@@ -272,6 +272,9 @@ async function showModel() {
   const container = element("diagram");
   container.textContent = "rendering graph, one second..";
   const text = modelText(await loadSchemas());
+  // Mermaid renders synchronously and blocks the main thread; wait for one
+  // paint so the notice (and the fetched version in the title) show first.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
   try {
     mermaid.initialize({ startOnLoad: false });
     const rendering = mermaid.render("modelGraph", text, (svgCode) => {
