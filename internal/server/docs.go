@@ -3,8 +3,11 @@ package server
 
 import (
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
+
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed openapi.yaml
@@ -13,11 +16,30 @@ var openAPISpec []byte
 //go:embed swaggerui
 var swaggerUIFiles embed.FS
 
+// specAsJSON converts the embedded YAML spec to JSON for clients without a
+// YAML parser, such as the admin UI's schema tables.
+func specAsJSON() []byte {
+	var document any
+	if err := yaml.Unmarshal(openAPISpec, &document); err != nil {
+		panic(err)
+	}
+	converted, err := json.Marshal(document)
+	if err != nil {
+		panic(err)
+	}
+	return converted
+}
+
 // registerDocs adds the documentation routes to mux.
 func registerDocs(mux *http.ServeMux) {
+	openAPISpecJSON := specAsJSON()
 	mux.HandleFunc("GET /api/openapi.yaml", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/yaml")
 		writer.Write(openAPISpec)
+	})
+	mux.HandleFunc("GET /api/openapi.json", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write(openAPISpecJSON)
 	})
 	assets, err := fs.Sub(swaggerUIFiles, "swaggerui")
 	if err != nil {

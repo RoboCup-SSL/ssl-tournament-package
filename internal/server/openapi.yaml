@@ -6,7 +6,7 @@ info:
     you send and rejects only unknown fields, vocabulary violations, and
     references to rows that do not exist. Consistency warnings are a later,
     advisory feature — never a write block.
-  version: 0.2.0
+  version: 0.2.4
 tags:
   - {name: tournaments}
   - {name: divisions}
@@ -372,6 +372,7 @@ components:
         created_at: {type: string, readOnly: true}
     Division:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
@@ -379,6 +380,7 @@ components:
         notes: {type: string}
     Team:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
@@ -391,18 +393,20 @@ components:
         created_at: {type: string, readOnly: true}
     Field:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
         name: {type: string}
     FieldBooking:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
         field_id: {type: integer, nullable: true}
         team_id: {type: integer, nullable: true}
-        kind: {type: string, enum: [booking, blocked]}
+        kind: {type: string, default: booking, enum: [booking, blocked]}
         label: {type: string}
         starts_at: {type: string, nullable: true}
         ends_at: {type: string, nullable: true}
@@ -414,6 +418,7 @@ components:
         rank: {type: integer}
     Group:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
@@ -433,6 +438,7 @@ components:
         match_id: {type: integer, nullable: true}
     Match:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}
@@ -442,7 +448,7 @@ components:
         field_id: {type: integer, nullable: true}
         scheduled_at: {type: string, nullable: true}
         duration_minutes: {type: integer, nullable: true}
-        status: {type: string, enum: [scheduled, playing, suspended, finished, forfeited, cancelled, invalidated]}
+        status: {type: string, default: scheduled, enum: [scheduled, playing, suspended, finished, forfeited, cancelled, invalidated]}
         referee_team_id: {type: integer, nullable: true}
         assistant_referee_team_id: {type: integer, nullable: true}
         a_team_id: {type: integer, nullable: true}
@@ -462,6 +468,7 @@ components:
         b_source: {$ref: '#/components/schemas/SlotSource'}
     Placement:
       type: object
+      required: [tournament_id]
       properties:
         id: {type: integer, readOnly: true}
         tournament_id: {type: integer}

@@ -15,6 +15,8 @@
   #error { background: #fdd; border: 1px solid #c66; padding: .5rem;
            white-space: pre-wrap; font-family: monospace; display: none; }
   #editor { display: none; margin-top: 1rem; }
+  details { margin-top: 1rem; }
+  summary { cursor: pointer; color: #666; }
 </style>
 
 <h1>SSL Tournament — temporary admin</h1>
@@ -31,6 +33,10 @@
   <button id="editorSave">save</button>
   <button id="editorCancel">cancel</button>
 </div>
+<details open>
+  <summary>schema</summary>
+  <table id="schema"></table>
+</details>
 <table id="rows"></table>
 
 <script>
@@ -44,9 +50,18 @@ const createTemplates = {
   matches: { tournament_id: 1 },
 };
 
+// Schema names in the OpenAPI document, per resource tab.
+const schemaNames = {
+  tournaments: "Tournament",
+  divisions: "Division",
+  teams: "Team",
+  matches: "Match",
+};
+
 let currentResource = "tournaments";
 let editorMethod = "POST";
 let editorPath = "";
+let openAPIDocument = null;
 
 const element = (id) => document.getElementById(id);
 
@@ -117,6 +132,62 @@ function renderTable(rows) {
   }
 }
 
+// loadSchemas fetches the OpenAPI document once and returns its schemas.
+async function loadSchemas() {
+  if (!openAPIDocument) openAPIDocument = await callApi("GET", "/api/openapi.json");
+  return openAPIDocument.components.schemas;
+}
+
+// describeType renders a property's type, inlining referenced sub-schemas
+// (like SlotSource) as their field list.
+function describeType(property, schemas) {
+  if (property.$ref) {
+    const name = property.$ref.split("/").pop();
+    const referenced = schemas[name];
+    return name + "{" + Object.keys(referenced.properties).join(", ") + "}" +
+      (referenced.nullable ? " | null" : "");
+  }
+  let text = property.type;
+  if (property.enum) {
+    text += ": " + property.enum.filter((value) => value !== null).join(" | ");
+  }
+  if (property.nullable) text += " | null";
+  return text;
+}
+
+// defaultWhenOmitted states what the server stores when the field is absent.
+function defaultWhenOmitted(property) {
+  if (property.readOnly) return "server-set";
+  if (property.default !== undefined) return JSON.stringify(property.default);
+  if (property.nullable || property.$ref) return "null";
+  if (property.type === "string") return '""';
+  if (property.type === "integer") return "0";
+  if (property.type === "array") return "[]";
+  return "";
+}
+
+// renderSchema rebuilds the schema table for the current resource.
+function renderSchema(schemas) {
+  const schema = schemas[schemaNames[currentResource]];
+  const table = element("schema");
+  table.textContent = "";
+  const required = schema.required || [];
+  const header = table.insertRow();
+  for (const title of ["field", "type", "required", "default when omitted", "notes"]) {
+    const cell = document.createElement("th");
+    cell.textContent = title;
+    header.appendChild(cell);
+  }
+  for (const [name, property] of Object.entries(schema.properties)) {
+    const tableRow = table.insertRow();
+    tableRow.insertCell().textContent = name;
+    tableRow.insertCell().textContent = describeType(property, schemas);
+    tableRow.insertCell().textContent = required.includes(name) ? "yes" : "";
+    tableRow.insertCell().textContent = required.includes(name) ? "—" : defaultWhenOmitted(property);
+    tableRow.insertCell().textContent = property.description || "";
+  }
+}
+
 async function loadRows() {
   clearError();
   try {
@@ -173,11 +244,16 @@ async function removeRow(id) {
   }
 }
 
-function selectResource(resource) {
+async function selectResource(resource) {
   currentResource = resource;
   closeEditor();
   for (const button of element("tabs").children) {
     button.classList.toggle("active", button.textContent === resource);
+  }
+  try {
+    renderSchema(await loadSchemas());
+  } catch (failure) {
+    showError(failure.message);
   }
   loadRows();
 }
