@@ -110,8 +110,12 @@ Resource path names: `tournaments`, `divisions`, `teams`, `fields`, `field-booki
 One envelope everywhere; `field` is present when the error is attributable to one field:
 
 ```json
-{"error": {"code": "MISSING_REFERENCE", "message": "division 3 does not exist", "field": "division_id"}}
+{"error": {"code": "INVALID_VALUE", "message": "invalid value for status", "field": "status"}}
 ```
+
+`code` and `field` are the stable machine-readable contract; `message` is an
+API-authored English rendering of them (a future translation layer keys on
+`code` + `field`). Database driver text never appears in a response.
 
 | Code | HTTP | When |
 |---|---|---|
@@ -123,9 +127,12 @@ One envelope everywhere; `field` is present when the error is attributable to on
 | INTERNAL | 500 | anything else |
 
 Mapping: `store.ErrNotFound → NOT_FOUND`; `ConstraintError{ForeignKey} →
-MISSING_REFERENCE`; `ConstraintError{Check|NotNull} → INVALID_VALUE` (message carries
-SQLite's constraint text, e.g. `NOT NULL constraint failed: team.tournament_id`;
-`field` is set when derivable from that text). Decode errors map in `respond.go`:
+MISSING_REFERENCE` ("referenced resource does not exist" — SQLite does not say
+which FK failed); `ConstraintError{Check|NotNull|Duplicate} → INVALID_VALUE`
+(the store extracts the violated column from the driver message when it names
+exactly one; `field` and a message like "invalid value for status" or "name
+must not be null" are built from it). Unclassified errors log server-side and
+return a bare "internal error". Decode errors map in `respond.go`:
 `json.SyntaxError → INVALID_JSON`, `json.UnmarshalTypeError → INVALID_VALUE` + field,
 unknown-field error → UNKNOWN_FIELD + field.
 

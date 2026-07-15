@@ -83,6 +83,9 @@ func TestDivisionCRUD(t *testing.T) {
 	if status != http.StatusConflict || errorCode(t, body) != "MISSING_REFERENCE" {
 		t.Errorf("dangling FK: %d %s", status, body)
 	}
+	if message := errorMessage(t, body); message != "referenced resource does not exist" {
+		t.Errorf("driver text must not leak into the message: %q", message)
+	}
 }
 
 func TestTeamCRUD(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// constraintKind runs statement and returns the translated ConstraintError kind.
-func constraintKind(t *testing.T, dataStore *Store, statement string) ConstraintKind {
+// constraintFor runs statement and returns the translated ConstraintError.
+func constraintFor(t *testing.T, dataStore *Store, statement string) *ConstraintError {
 	t.Helper()
 	_, err := dataStore.db.Exec(statement)
 	translated := translate(err)
@@ -15,7 +15,7 @@ func constraintKind(t *testing.T, dataStore *Store, statement string) Constraint
 	if !errors.As(translated, &constraintError) {
 		t.Fatalf("expected ConstraintError, got %v", translated)
 	}
-	return constraintError.Kind
+	return constraintError
 }
 
 func TestTranslateConstraintKinds(t *testing.T) {
@@ -24,17 +24,25 @@ func TestTranslateConstraintKinds(t *testing.T) {
 		`INSERT INTO tournament (id, name) VALUES (1, 'T')`); err != nil {
 		t.Fatal(err)
 	}
-	if kind := constraintKind(t, dataStore,
-		`INSERT INTO division (tournament_id, name) VALUES (99, 'A')`); kind != ConstraintForeignKey {
-		t.Errorf("foreign key: got kind %v", kind)
+	foreignKey := constraintFor(t, dataStore,
+		`INSERT INTO division (tournament_id, name) VALUES (99, 'A')`)
+	if foreignKey.Kind != ConstraintForeignKey || foreignKey.Column != "" {
+		t.Errorf("foreign key: got %+v", foreignKey)
 	}
-	if kind := constraintKind(t, dataStore,
-		`INSERT INTO field_booking (tournament_id, kind) VALUES (1, 'party')`); kind != ConstraintCheck {
-		t.Errorf("check: got kind %v", kind)
+	check := constraintFor(t, dataStore,
+		`INSERT INTO field_booking (tournament_id, kind) VALUES (1, 'party')`)
+	if check.Kind != ConstraintCheck || check.Column != "kind" {
+		t.Errorf("check: got %+v", check)
 	}
-	if kind := constraintKind(t, dataStore,
-		`INSERT INTO division (tournament_id, name) VALUES (1, NULL)`); kind != ConstraintNotNull {
-		t.Errorf("not null: got kind %v", kind)
+	notNull := constraintFor(t, dataStore,
+		`INSERT INTO division (tournament_id, name) VALUES (1, NULL)`)
+	if notNull.Kind != ConstraintNotNull || notNull.Column != "name" {
+		t.Errorf("not null: got %+v", notNull)
+	}
+	duplicateSingle := constraintFor(t, dataStore,
+		`INSERT INTO tournament (id, name) VALUES (1, 'dup')`)
+	if duplicateSingle.Kind != ConstraintDuplicate || duplicateSingle.Column != "id" {
+		t.Errorf("single-column duplicate: got %+v", duplicateSingle)
 	}
 	if _, err := dataStore.db.Exec(
 		`INSERT INTO team (id, tournament_id, name) VALUES (1, 1, 'X')`); err != nil {
@@ -48,9 +56,10 @@ func TestTranslateConstraintKinds(t *testing.T) {
 		`INSERT INTO group_ranking (group_id, team_id, rank) VALUES (1, 1, 1)`); err != nil {
 		t.Fatal(err)
 	}
-	if kind := constraintKind(t, dataStore,
-		`INSERT INTO group_ranking (group_id, team_id, rank) VALUES (1, 1, 2)`); kind != ConstraintDuplicate {
-		t.Errorf("duplicate: got kind %v", kind)
+	duplicateComposite := constraintFor(t, dataStore,
+		`INSERT INTO group_ranking (group_id, team_id, rank) VALUES (1, 1, 2)`)
+	if duplicateComposite.Kind != ConstraintDuplicate || duplicateComposite.Column != "" {
+		t.Errorf("multi-column duplicate: got %+v", duplicateComposite)
 	}
 	if translated := translate(nil); translated != nil {
 		t.Errorf("translate(nil) = %v", translated)

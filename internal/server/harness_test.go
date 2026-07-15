@@ -77,3 +77,15 @@ func errorCode(t *testing.T, body []byte) string {
 	code, _ := errorObject["code"].(string)
 	return code
 }
+
+// errorMessage extracts the message from an error envelope.
+func errorMessage(t *testing.T, body []byte) string {
+	t.Helper()
+	envelope := asObject(t, body)
+	errorObject, isObject := envelope["error"].(map[string]any)
+	if !isObject {
+		t.Fatalf("no error envelope in %s", body)
+	}
+	message, _ := errorObject["message"].(string)
+	return message
+}

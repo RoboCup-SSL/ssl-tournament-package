@@ -10,26 +10,37 @@ import (
 
 func TestFromStore(t *testing.T) {
 	cases := []struct {
-		name string
-		err  error
-		code string
+		name    string
+		err     error
+		code    string
+		message string
+		field   string
 	}{
-		{"not found", store.ErrNotFound, CodeNotFound},
-		{"foreign key", &store.ConstraintError{Kind: store.ConstraintForeignKey, Detail: "FOREIGN KEY constraint failed"}, CodeMissingReference},
-		{"check", &store.ConstraintError{Kind: store.ConstraintCheck, Detail: "CHECK constraint failed: kind"}, CodeInvalidValue},
-		{"not null", &store.ConstraintError{Kind: store.ConstraintNotNull, Detail: "NOT NULL constraint failed: team.name"}, CodeInvalidValue},
-		{"duplicate", &store.ConstraintError{Kind: store.ConstraintDuplicate, Detail: "UNIQUE constraint failed: group_ranking.group_id, group_ranking.team_id"}, CodeInvalidValue},
-		{"other", errors.New("disk exploded"), CodeInternal},
+		{"not found", store.ErrNotFound,
+			CodeNotFound, "not found", ""},
+		{"foreign key", &store.ConstraintError{Kind: store.ConstraintForeignKey, Detail: "FOREIGN KEY constraint failed (787)"},
+			CodeMissingReference, "referenced resource does not exist", ""},
+		{"check with column", &store.ConstraintError{Kind: store.ConstraintCheck, Column: "kind", Detail: "CHECK constraint failed: kind IN ('booking','blocked') (275)"},
+			CodeInvalidValue, "invalid value for kind", "kind"},
+		{"check without column", &store.ConstraintError{Kind: store.ConstraintCheck},
+			CodeInvalidValue, "value is not allowed", ""},
+		{"not null with column", &store.ConstraintError{Kind: store.ConstraintNotNull, Column: "name", Detail: "NOT NULL constraint failed: team.name (1299)"},
+			CodeInvalidValue, "name must not be null", "name"},
+		{"not null without column", &store.ConstraintError{Kind: store.ConstraintNotNull},
+			CodeInvalidValue, "required value is missing", ""},
+		{"duplicate with column", &store.ConstraintError{Kind: store.ConstraintDuplicate, Column: "id", Detail: "UNIQUE constraint failed: tournament.id (1555)"},
+			CodeInvalidValue, "duplicate value for id", "id"},
+		{"duplicate without column", &store.ConstraintError{Kind: store.ConstraintDuplicate, Detail: "UNIQUE constraint failed: group_ranking.group_id, group_ranking.team_id (2067)"},
+			CodeInvalidValue, "duplicate value", ""},
+		{"other", errors.New("disk exploded"),
+			CodeInternal, "internal error", ""},
 	}
 	for _, testCase := range cases {
-		if mapped := fromStore(testCase.err); mapped.Code != testCase.code {
-			t.Errorf("%s: got %s, want %s", testCase.name, mapped.Code, testCase.code)
+		mapped := fromStore(testCase.err)
+		if mapped.Code != testCase.code || mapped.Message != testCase.message || mapped.Field != testCase.field {
+			t.Errorf("%s: got %+v, want {%s %q %q}",
+				testCase.name, mapped, testCase.code, testCase.message, testCase.field)
 		}
-	}
-	notNull := fromStore(&store.ConstraintError{Kind: store.ConstraintNotNull,
-		Detail: "NOT NULL constraint failed: team.name"})
-	if notNull.Field != "name" {
-		t.Errorf("field extraction: got %q, want name", notNull.Field)
 	}
 }
 
