@@ -1,4 +1,196 @@
 <!doctype html>
+<!-- Temporary stone-age admin UI: raw CRUD over the JSON API for tournaments,
+     divisions, teams, and matches. One vanilla file, no build step; replaced
+     wholesale by the real frontend later. -->
 <meta charset="utf-8">
 <title>SSL Tournament</title>
-<h1>hello</h1>
+<style>
+  body { font-family: sans-serif; margin: 1rem; }
+  nav button { margin-right: .5rem; padding: .3rem .8rem; }
+  nav button.active { font-weight: bold; background: #cde; }
+  table { border-collapse: collapse; margin-top: 1rem; }
+  th, td { border: 1px solid #999; padding: .2rem .5rem; font-size: .85rem;
+           font-family: monospace; text-align: left; }
+  textarea { width: 100%; max-width: 40rem; height: 12rem; font-family: monospace; }
+  #error { background: #fdd; border: 1px solid #c66; padding: .5rem;
+           white-space: pre-wrap; font-family: monospace; display: none; }
+  #editor { display: none; margin-top: 1rem; }
+</style>
+
+<h1>SSL Tournament — temporary admin</h1>
+<nav id="tabs"></nav>
+<p>
+  <label>tournament_id filter: <input id="filter" size="6"></label>
+  <button id="reload">reload</button>
+  <button id="create">new</button>
+</p>
+<div id="error"></div>
+<div id="editor">
+  <h3 id="editorTitle"></h3>
+  <textarea id="editorText"></textarea><br>
+  <button id="editorSave">save</button>
+  <button id="editorCancel">cancel</button>
+</div>
+<table id="rows"></table>
+
+<script>
+"use strict";
+
+// Create templates per resource; the API fills in defaults and rejects the rest.
+const createTemplates = {
+  tournaments: { name: "" },
+  divisions: { tournament_id: 1, name: "" },
+  teams: { tournament_id: 1, name: "" },
+  matches: { tournament_id: 1 },
+};
+
+let currentResource = "tournaments";
+let editorMethod = "POST";
+let editorPath = "";
+
+const element = (id) => document.getElementById(id);
+
+function showError(text) {
+  element("error").textContent = text;
+  element("error").style.display = "block";
+}
+
+function clearError() {
+  element("error").style.display = "none";
+}
+
+// callApi performs one request and throws the error envelope text on failure.
+async function callApi(method, path, body) {
+  const options = { method };
+  if (body !== undefined) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = body;
+  }
+  const response = await fetch(path, options);
+  if (response.status === 204) return null;
+  const payload = await response.json();
+  if (!response.ok) throw new Error(JSON.stringify(payload, null, 2));
+  return payload;
+}
+
+function listPath() {
+  const filter = element("filter").value.trim();
+  if (filter === "" || currentResource === "tournaments") {
+    return "/api/" + currentResource;
+  }
+  return "/api/" + currentResource + "?tournament_id=" + encodeURIComponent(filter);
+}
+
+// renderTable rebuilds the rows table: one column per key seen in any row,
+// plus edit/delete actions. Values render as JSON so nested objects stay visible.
+function renderTable(rows) {
+  const table = element("rows");
+  table.textContent = "";
+  const columns = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!columns.includes(key)) columns.push(key);
+    }
+  }
+  const header = table.insertRow();
+  for (const column of columns.concat("")) {
+    const cell = document.createElement("th");
+    cell.textContent = column;
+    header.appendChild(cell);
+  }
+  for (const row of rows) {
+    const tableRow = table.insertRow();
+    for (const column of columns) {
+      const value = row[column];
+      tableRow.insertCell().textContent =
+        value === null || value === undefined ? "" :
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+    }
+    const actions = tableRow.insertCell();
+    const editButton = document.createElement("button");
+    editButton.textContent = "edit";
+    editButton.onclick = () => openEdit(row);
+    const deleteButton = document.createElement("button");
+    deleteButton.textContent = "delete";
+    deleteButton.onclick = () => removeRow(row.id);
+    actions.append(editButton, " ", deleteButton);
+  }
+}
+
+async function loadRows() {
+  clearError();
+  try {
+    renderTable(await callApi("GET", listPath()));
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+function openEditor(title, method, path, prefill) {
+  editorMethod = method;
+  editorPath = path;
+  element("editorTitle").textContent = title;
+  element("editorText").value = JSON.stringify(prefill, null, 2);
+  element("editor").style.display = "block";
+}
+
+function openCreate() {
+  openEditor("new " + currentResource, "POST", "/api/" + currentResource,
+    createTemplates[currentResource]);
+}
+
+function openEdit(row) {
+  const patch = { ...row };
+  delete patch.id;
+  delete patch.created_at;
+  openEditor("edit " + currentResource + " " + row.id, "PATCH",
+    "/api/" + currentResource + "/" + row.id, patch);
+}
+
+function closeEditor() {
+  element("editor").style.display = "none";
+}
+
+async function submitEditor() {
+  clearError();
+  try {
+    await callApi(editorMethod, editorPath, element("editorText").value);
+    closeEditor();
+    await loadRows();
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+async function removeRow(id) {
+  if (!confirm("delete " + currentResource + " " + id + "?")) return;
+  clearError();
+  try {
+    await callApi("DELETE", "/api/" + currentResource + "/" + id);
+    await loadRows();
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+function selectResource(resource) {
+  currentResource = resource;
+  closeEditor();
+  for (const button of element("tabs").children) {
+    button.classList.toggle("active", button.textContent === resource);
+  }
+  loadRows();
+}
+
+for (const resource of Object.keys(createTemplates)) {
+  const button = document.createElement("button");
+  button.textContent = resource;
+  button.onclick = () => selectResource(resource);
+  element("tabs").appendChild(button);
+}
+element("reload").onclick = loadRows;
+element("create").onclick = openCreate;
+element("editorSave").onclick = submitEditor;
+element("editorCancel").onclick = closeEditor;
+selectResource("tournaments");
+</script>
