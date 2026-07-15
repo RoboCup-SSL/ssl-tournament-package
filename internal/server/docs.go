@@ -35,10 +35,12 @@ func registerDocs(mux *http.ServeMux) {
 	openAPISpecJSON := specAsJSON()
 	mux.HandleFunc("GET /api/openapi.yaml", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/yaml")
+		writer.Header().Set("Cache-Control", "no-store")
 		writer.Write(openAPISpec)
 	})
 	mux.HandleFunc("GET /api/openapi.json", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
+		writer.Header().Set("Cache-Control", "no-store")
 		writer.Write(openAPISpecJSON)
 	})
 	assets, err := fs.Sub(swaggerUIFiles, "swaggerui")

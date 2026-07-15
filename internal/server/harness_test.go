@@ -21,7 +21,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { dataStore.Close() })
-	testServer := httptest.NewServer(NewMux(dataStore))
+	testServer := httptest.NewServer(NewMux("test-version", dataStore))
 	t.Cleanup(testServer.Close)
 	return testServer
 }

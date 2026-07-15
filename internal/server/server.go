@@ -2,6 +2,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -9,9 +10,9 @@ import (
 	"github.com/RoboCup-SSL/ssl-tournament-package/internal/store"
 )
 
-// NewMux returns the HTTP routes: /healthz (reports database reachability)
-// and the embedded web UI at /.
-func NewMux(dataStore *store.Store) *http.ServeMux {
+// NewMux returns the HTTP routes: /healthz (reports database reachability),
+// /api/version, and the embedded web UI at /.
+func NewMux(version string, dataStore *store.Store) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := dataStore.Ping(); err != nil {
@@ -19,6 +20,11 @@ func NewMux(dataStore *store.Store) *http.ServeMux {
 			return
 		}
 		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /api/version", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(writer).Encode(map[string]string{"version": version})
 	})
 	register(mux, &handlers{dataStore: dataStore})
 	registerDocs(mux)
@@ -30,5 +36,5 @@ func NewMux(dataStore *store.Store) *http.ServeMux {
 func Run(host, port, version string, dataStore *store.Store) error {
 	addr := host + ":" + port
 	log.Printf("ssl-tournament %s serving on http://%s", version, addr)
-	return http.ListenAndServe(addr, NewMux(dataStore))
+	return http.ListenAndServe(addr, NewMux(version, dataStore))
 }

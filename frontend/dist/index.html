@@ -19,7 +19,7 @@
   summary { cursor: pointer; color: #666; }
 </style>
 
-<h1>SSL Tournament — temporary admin</h1>
+<h1 id="heading">SSL Tournament — temporary admin</h1>
 <nav id="tabs"></nav>
 <p>
   <label>tournament_id filter: <input id="filter" size="6"></label>
@@ -264,9 +264,22 @@ for (const resource of Object.keys(createTemplates)) {
   button.onclick = () => selectResource(resource);
   element("tabs").appendChild(button);
 }
+// showVersion puts the server's build version in the title and heading.
+async function showVersion() {
+  try {
+    const payload = await callApi("GET", "/api/version");
+    document.title = "SSL Tournament " + payload.version;
+    element("heading").textContent =
+      "SSL Tournament " + payload.version + " — temporary admin";
+  } catch {
+    // Keep the static title when the version endpoint is unreachable.
+  }
+}
+
 element("reload").onclick = loadRows;
 element("create").onclick = openCreate;
 element("editorSave").onclick = submitEditor;
 element("editorCancel").onclick = closeEditor;
+showVersion();
 selectResource("tournaments");
 </script>
