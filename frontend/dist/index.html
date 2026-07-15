@@ -40,7 +40,6 @@
 <table id="rows"></table>
 <div id="diagram" style="display: none; overflow: auto;"></div>
 
-<script src="/mermaid.min.js"></script>
 <script>
 "use strict";
 
@@ -265,17 +264,36 @@ function modelText(schemas) {
   return lines.join("\n");
 }
 
+let mermaidLoading = null;
+
+// loadMermaid injects the mermaid script on first use; the 1 MB library
+// would otherwise delay every page load.
+function loadMermaid() {
+  if (window.mermaid) return Promise.resolve();
+  if (!mermaidLoading) {
+    mermaidLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "/mermaid.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("mermaid.min.js failed to load"));
+      document.head.appendChild(script);
+    });
+  }
+  return mermaidLoading;
+}
+
 // showModel renders the data-model diagram once; when mermaid is missing or
 // fails, the diagram source is shown as text instead.
 async function showModel() {
   if (modelRendered) return;
   const container = element("diagram");
   container.textContent = "rendering graph, one second..";
-  const text = modelText(await loadSchemas());
-  // Mermaid renders synchronously and blocks the main thread; wait for one
-  // paint so the notice (and the fetched version in the title) show first.
+  // Mermaid loads and renders on the main thread; wait for one paint so the
+  // notice (and the fetched version in the title) show first.
   await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  const text = modelText(await loadSchemas());
   try {
+    await loadMermaid();
     mermaid.initialize({ startOnLoad: false });
     const rendering = mermaid.render("modelGraph", text, (svgCode) => {
       container.innerHTML = svgCode;
