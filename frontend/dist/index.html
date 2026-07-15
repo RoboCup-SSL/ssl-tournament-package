@@ -21,7 +21,7 @@
 
 <h1 id="heading">SSL Tournament — temporary admin</h1>
 <nav id="tabs"></nav>
-<p>
+<p id="toolbar">
   <label>tournament_id filter: <input id="filter" size="6"></label>
   <button id="reload">reload</button>
   <button id="create">new</button>
@@ -33,12 +33,14 @@
   <button id="editorSave">save</button>
   <button id="editorCancel">cancel</button>
 </div>
-<details open>
+<details open id="schemaBox">
   <summary>schema</summary>
   <table id="schema"></table>
 </details>
 <table id="rows"></table>
+<div id="diagram" style="display: none; overflow: auto;"></div>
 
+<script src="/mermaid.min.js"></script>
 <script>
 "use strict";
 
@@ -58,10 +60,42 @@ const schemaNames = {
   matches: "Match",
 };
 
+// Entities drawn on the model tab, and the foreign-key edges between them:
+// [parent, child, label, nullable]. Field lists come from the OpenAPI spec;
+// only these relationships are maintained by hand.
+const modelEntities = [
+  "Tournament", "Division", "Team", "Field",
+  "FieldBooking", "Group", "Match", "Placement",
+];
+const modelRelationships = [
+  ["Tournament", "Division", "tournament_id", false],
+  ["Tournament", "Team", "tournament_id", false],
+  ["Division", "Team", "division_id", true],
+  ["Tournament", "Field", "tournament_id", false],
+  ["Tournament", "FieldBooking", "tournament_id", false],
+  ["Field", "FieldBooking", "field_id", true],
+  ["Team", "FieldBooking", "team_id", true],
+  ["Tournament", "Group", "tournament_id", false],
+  ["Division", "Group", "division_id", true],
+  ["Tournament", "Match", "tournament_id", false],
+  ["Division", "Match", "division_id", true],
+  ["Group", "Match", "group_id", true],
+  ["Field", "Match", "field_id", true],
+  ["Team", "Match", "a/b/referee/assistant/winner team ids", true],
+  ["Group", "Match", "a_source/b_source group_rank", true],
+  ["Match", "Match", "a_source/b_source match_winner/loser", true],
+  ["Tournament", "Placement", "tournament_id", false],
+  ["Division", "Placement", "division_id", true],
+  ["Group", "Placement", "source_group_id", true],
+  ["Match", "Placement", "source_match_id", true],
+  ["Team", "Placement", "resolved_team_id", true],
+];
+
 let currentResource = "tournaments";
 let editorMethod = "POST";
 let editorPath = "";
 let openAPIDocument = null;
+let modelRendered = false;
 
 const element = (id) => document.getElementById(id);
 
@@ -188,6 +222,66 @@ function renderSchema(schemas) {
   }
 }
 
+// modelAttribute renders one erDiagram attribute line for a schema property.
+function modelAttribute(name, property, required) {
+  let type = property.type || "object";
+  if (property.$ref) type = property.$ref.split("/").pop();
+  const key = name === "id" ? " PK" : name.endsWith("_id") ? " FK" : "";
+  const notes = [];
+  if (property.readOnly) notes.push("server-set");
+  else if (required.includes(name)) notes.push("required");
+  if (property.nullable || property.$ref) notes.push("nullable");
+  if (property.default !== undefined) notes.push("default " + property.default);
+  const comment = notes.length ? ' "' + notes.join(", ") + '"' : "";
+  return "    " + type + " " + name + key + comment;
+}
+
+// modelText builds the mermaid erDiagram source from the OpenAPI schemas
+// and the hand-maintained relationship list.
+function modelText(schemas) {
+  const lines = ["erDiagram"];
+  for (const entity of modelEntities) {
+    const schema = schemas[entity];
+    const required = schema.required || [];
+    lines.push("  " + entity + " {");
+    for (const [name, property] of Object.entries(schema.properties)) {
+      lines.push(modelAttribute(name, property, required));
+    }
+    lines.push("  }");
+  }
+  for (const [parent, child, label, nullable] of modelRelationships) {
+    lines.push("  " + parent + (nullable ? " |o--o{ " : " ||--o{ ") +
+      child + ' : "' + label + '"');
+  }
+  lines.push('  Group }o--o{ Team : "member_team_ids, ranking"');
+  return lines.join("\n");
+}
+
+// showModel renders the data-model diagram once; when mermaid is missing or
+// fails, the diagram source is shown as text instead.
+async function showModel() {
+  if (modelRendered) return;
+  const container = element("diagram");
+  const text = modelText(await loadSchemas());
+  try {
+    mermaid.initialize({ startOnLoad: false });
+    const rendering = mermaid.render("modelGraph", text, (svgCode) => {
+      container.innerHTML = svgCode;
+    });
+    if (rendering && typeof rendering.then === "function") {
+      const { svg } = await rendering;
+      container.innerHTML = svg;
+    }
+    modelRendered = true;
+  } catch (failure) {
+    const source = document.createElement("pre");
+    source.textContent = text;
+    container.textContent = "";
+    container.appendChild(source);
+    showError("mermaid rendering unavailable: " + failure.message);
+  }
+}
+
 async function loadRows() {
   clearError();
   try {
@@ -247,8 +341,22 @@ async function removeRow(id) {
 async function selectResource(resource) {
   currentResource = resource;
   closeEditor();
+  clearError();
   for (const button of element("tabs").children) {
     button.classList.toggle("active", button.textContent === resource);
+  }
+  const isModel = resource === "model";
+  element("toolbar").style.display = isModel ? "none" : "";
+  element("schemaBox").style.display = isModel ? "none" : "";
+  element("rows").style.display = isModel ? "none" : "";
+  element("diagram").style.display = isModel ? "" : "none";
+  if (isModel) {
+    try {
+      await showModel();
+    } catch (failure) {
+      showError(failure.message);
+    }
+    return;
   }
   try {
     renderSchema(await loadSchemas());
@@ -258,7 +366,7 @@ async function selectResource(resource) {
   loadRows();
 }
 
-for (const resource of Object.keys(createTemplates)) {
+for (const resource of ["model"].concat(Object.keys(createTemplates))) {
   const button = document.createElement("button");
   button.textContent = resource;
   button.onclick = () => selectResource(resource);
@@ -281,5 +389,5 @@ element("create").onclick = openCreate;
 element("editorSave").onclick = submitEditor;
 element("editorCancel").onclick = closeEditor;
 showVersion();
-selectResource("tournaments");
+selectResource("model");
 </script>
