@@ -22,30 +22,65 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
 ## Milestone 2 — core API + editing UI
 - **M2a (API): done** — see docs/superpowers/specs/2026-07-14-m2a-crud-api-design.md; Swagger UI at /api/docs.
 - JSON CRUD for teams / tournament / format.
-- **Proper editing UI first, wizard later.** The deliverable is a complete UI that lets
-  organizers create and change *anything* in the freeform model at any time (fields, teams,
-  divisions, groups, matches, placements) — matching the "freeform by design" principle. The
-  guided wizard (welcome → where/when → fields → teams → format → run) is a later luxury layered
-  *on top* of that UI to smooth first-time setup; it does nothing the editing UI can't. M3
-  generators (round-robin pairings, bracket wiring, ref suggestions) later appear as *helpers*
-  inside the editing UI, producing ordinary rows that stay hand-editable — so the UI needs no
-  M3 to be useful.
-- **Stack (confirmed at M2):** Vue 3 + TypeScript + Quasar + Vite + Pinia + Vue Router, mirroring
-  `ssl-game-controller`'s toolchain and versions — but *not* its transport (GC streams live state
-  over WebSocket+protobuf; this app is API-first JSON over `net/http`, so a plain fetch/JSON client,
-  no protobuf/WS, no `src/proto/`). Built to `dist/`, embedded via `//go:embed`.
-- **Information architecture:** instance = tournament list + "new tournament"; pick one → a
-  tournament-scoped workspace with per-entity sections (Overview, Settings/where-when, Fields,
-  Teams, Divisions, Groups, Matches, Standings/Bracket, Placements) — drawer on desktop, menu on
-  mobile. Build order is value-first, simple→hard.
-- **Sub-specs:**
-  - M2b — frontend shell (thin vertical slice): toolchain + JSON client + Pinia + hash router +
-    embed pipeline + one read-only HomeView (tournament list). See
-    docs/superpowers/specs/2026-07-17-m2b-frontend-shell-design.md.
-  - M2c — workspace shell + Settings (where/when) section (thinnest section slice, proves the pattern).
-  - M2d+ — remaining plain-CRUD sections (Fields, Teams, Divisions), then Groups, then Matches,
-    then Standings/Bracket views.
-  - Later — the guided wizard layer.
+
+### North star: replace the schedule Excel sheet
+The first thing worth shipping is a **schedule view** — every match on a field × time grid,
+add/move/edit in a couple of clicks (not a million clicks in a Google Doc), including assigning
+the referee/assistant teams. That single deliverable *is* the MVP: "move the schedule off Google
+Sheets onto a homepage, with ref assignment, exportable as ICS." Everything fancier — automated
+scheduling, automated ref suggestion, Game-Controller result ingestion — is added **only after**
+that works and is thoroughly tested.
+
+This scope-down came from RoboCup-SSL organizer feedback (Tobias, TIGERs): limit scope, go one
+increment at a time, and treat **testing/verification as the biggest risk** — it's the first
+thing to fall off the cliff when scope balloons. Their concrete asks (schedule visualization that
+isn't painful, ICS export, ref-assignment help, and software that *catches mistakes*) shape the
+order below.
+
+### Running principles
+- **Proper editing UI first, wizard later.** The deliverable is a complete UI that lets organizers
+  create and change *anything* in the freeform model at any time (fields, teams, divisions, groups,
+  matches, placements) — matching the "freeform by design" principle. The guided wizard
+  (welcome → where/when → fields → teams → format → run) is a later luxury layered *on top* to
+  smooth first-time setup; it does nothing the editing UI can't.
+- **Freeform, never prescriptive.** The data model already supports both the freeform Excel use
+  case (schedule any match, no restrictions) *and* the nice structured stuff (groups, elimination,
+  auto-advancing winners/losers). We do **not** build a prescriptive "one true format" engine —
+  schedules differ every time (cf. FIFA; the B-division Swiss experiment). Structure-aware help
+  arrives later as **catch-and-warn** validation (flag likely mistakes, e.g. a needless
+  lower-bracket match right after the upper-bracket one) — warnings, never hard constraints.
+- **One increment at a time, each thoroughly tested before the next.**
+- **M3 generators appear as in-UI helpers**, producing ordinary hand-editable rows — so the UI
+  needs no M3 to be useful.
+
+### Stack (confirmed at M2)
+Vue 3 + TypeScript + Quasar + Vite + Pinia + Vue Router, mirroring `ssl-game-controller`'s
+toolchain and versions — but *not* its transport (GC streams live state over WebSocket+protobuf;
+this app is API-first JSON over `net/http`, so a plain fetch/JSON client, no protobuf/WS, no
+`src/proto/`). Built to `dist/`, embedded via `//go:embed`.
+
+### Information architecture
+Instance = tournament list + "new tournament"; pick one → a tournament-scoped workspace with
+per-entity sections (Overview, Settings/where-when, Fields, Teams, Divisions, Groups, Matches,
+Standings/Bracket, Placements) — drawer on desktop, menu on mobile.
+
+### Build order (value-first, toward the MVP then outward)
+- **M2b** — frontend shell (thin vertical slice): toolchain + JSON client + Pinia + hash router +
+  embed pipeline + one read-only HomeView (tournament list). See
+  docs/superpowers/specs/2026-07-17-m2b-frontend-shell-design.md.
+- **M2c** — workspace shell + Settings (where/when) section: dates, venue hours, default
+  match/gap minutes (the scheduling inputs). Thinnest section slice; proves the section pattern.
+- **M2d** — Fields + Teams sections: the entities a match references.
+- **M2e — Schedule view (the MVP):** matches on a field × time grid; create/move/edit freely,
+  assign ref/assistant teams (`referee_team_id`/`assistant_referee_team_id` already in the model).
+  This is the Excel replacement.
+- **M2f** — ICS export from the schedule (each match → a calendar event).
+- **Later (enhancements on the freeform base, only after the MVP is solid + tested):**
+  - Divisions/Groups sections, elimination wiring (slot_source), auto-advance, standings/bracket views.
+  - Catch-and-warn validation warnings.
+  - Automated ref *suggestion* (M3 `refsuggest`) and automated scheduling.
+  - Game-Controller result ingestion → one-click "yes, the score sheet agrees" confirm (ties into M4).
+- **Last** — the guided wizard layer.
 
 ## Milestone 3 — domain logic (internal packages)
 - `brackets`/`standings`: matches as edges in a bracket graph → "who advances" + "who's

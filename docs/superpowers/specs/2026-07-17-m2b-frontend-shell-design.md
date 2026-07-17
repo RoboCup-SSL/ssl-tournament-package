@@ -165,9 +165,14 @@ workspace with per-entity sections, not wizard steps.
   sections, with the first section (Tournament settings: location, dates, venue
   hours, default match/gap minutes) as a real editable form. Thinnest section
   slice; proves the section pattern before fanning out. First write operations.
-- **M2d+** — remaining plain-CRUD sections (Fields, Teams, Divisions), then
-  Groups, then Matches (slot_source wiring), then Standings/Bracket views.
-- **Later** — the guided wizard layer; M3 generators surfaced as in-UI helpers.
+- **M2d** — Fields + Teams sections (the entities a match references).
+- **M2e** — Schedule view (the MVP): matches on a field × time grid,
+  create/move/edit freely incl. ref/assistant assignment. Replaces the Excel
+  sheet — the north star per organizer feedback (see roadmap M2).
+- **M2f** — ICS export from the schedule.
+- **Later** — Divisions/Groups, elimination wiring, auto-advance,
+  standings/bracket; catch-and-warn validation; automated ref suggestion (M3)
+  and scheduling; GC result → one-click confirm (M4); guided wizard last.
 - OpenAPI → TS type generation once the type surface justifies it.
 - Flip dist strategy to option B (gitignore + CI Node build) when stable.
 - Component tests (Vitest) once there is real interaction logic to cover.
