@@ -31,11 +31,16 @@ export CGO_ENABLED := 0
 # Stamp the version into main.version. -s -w strips debug info to shrink binaries.
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: all build run test clean release
+.PHONY: all build run test clean release frontend
 
 # Native build of the server → ./ssl-tournament
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(SERVER) ./cmd/$(SERVER)
+
+# Rebuild the embedded web UI into frontend/dist (committed). Requires Node.
+# Run after changing frontend/ source, then commit the regenerated dist.
+frontend:
+	cd frontend && npm ci && npm run build
 
 run:
 	go run ./cmd/$(SERVER)
