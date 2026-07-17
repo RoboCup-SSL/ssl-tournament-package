@@ -19,15 +19,33 @@ milestone leaves a runnable binary. Mirror `ssl-game-controller`
 - Schema + simple migrations. Core tables: `teams`, `tournaments`, `matches`, `assignments`,
   `events`, `tokens` (fields per architecture.md's Auth + Event-flow sections).
 
-## Milestone 2 — core API + wizard UI
+## Milestone 2 — core API + editing UI
 - **M2a (API): done** — see docs/superpowers/specs/2026-07-14-m2a-crud-api-design.md; Swagger UI at /api/docs.
 - JSON CRUD for teams / tournament / format.
-- Mobile-first wizard frontend built to `dist/`, embedded.
-  Flow: welcome → where/when → fields → teams → format → run.
-- Tentative stack (to confirm at M2): **Vue 3 + TypeScript + Quasar + Vite**, mirroring
-  `ssl-game-controller`'s frontend so its setup, dev-proxy, and component patterns copy over.
-  Take GC's toolchain but *not* its transport — GC streams live state over WebSocket+protobuf;
-  this app is API-first JSON over `net/http`, so use a plain fetch/JSON client.
+- **Proper editing UI first, wizard later.** The deliverable is a complete UI that lets
+  organizers create and change *anything* in the freeform model at any time (fields, teams,
+  divisions, groups, matches, placements) — matching the "freeform by design" principle. The
+  guided wizard (welcome → where/when → fields → teams → format → run) is a later luxury layered
+  *on top* of that UI to smooth first-time setup; it does nothing the editing UI can't. M3
+  generators (round-robin pairings, bracket wiring, ref suggestions) later appear as *helpers*
+  inside the editing UI, producing ordinary rows that stay hand-editable — so the UI needs no
+  M3 to be useful.
+- **Stack (confirmed at M2):** Vue 3 + TypeScript + Quasar + Vite + Pinia + Vue Router, mirroring
+  `ssl-game-controller`'s toolchain and versions — but *not* its transport (GC streams live state
+  over WebSocket+protobuf; this app is API-first JSON over `net/http`, so a plain fetch/JSON client,
+  no protobuf/WS, no `src/proto/`). Built to `dist/`, embedded via `//go:embed`.
+- **Information architecture:** instance = tournament list + "new tournament"; pick one → a
+  tournament-scoped workspace with per-entity sections (Overview, Settings/where-when, Fields,
+  Teams, Divisions, Groups, Matches, Standings/Bracket, Placements) — drawer on desktop, menu on
+  mobile. Build order is value-first, simple→hard.
+- **Sub-specs:**
+  - M2b — frontend shell (thin vertical slice): toolchain + JSON client + Pinia + hash router +
+    embed pipeline + one read-only HomeView (tournament list). See
+    docs/superpowers/specs/2026-07-17-m2b-frontend-shell-design.md.
+  - M2c — workspace shell + Settings (where/when) section (thinnest section slice, proves the pattern).
+  - M2d+ — remaining plain-CRUD sections (Fields, Teams, Divisions), then Groups, then Matches,
+    then Standings/Bracket views.
+  - Later — the guided wizard layer.
 
 ## Milestone 3 — domain logic (internal packages)
 - `brackets`/`standings`: matches as edges in a bracket graph → "who advances" + "who's

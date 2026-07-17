@@ -154,8 +154,20 @@ Two, minimized to lean on the local cache:
 
 ## Follow-ups (later specs)
 
-- Wizard steps as views/routes: welcome → where/when → fields → teams → format
-  → run, each with its own store slice and write operations.
+Reframed 2026-07-17: **proper editing UI first, wizard later.** The product is a
+complete UI for editing the freeform model at any time; the guided wizard is a
+later luxury layered on top (see roadmap M2). So HomeView here grows into the
+instance-level tournament list, and the next specs build a tournament-scoped
+workspace with per-entity sections, not wizard steps.
+
+- **M2c** — workspace shell + Settings (where/when) section: a tournament
+  workspace layout (drawer on desktop, menu on mobile) hosting per-entity
+  sections, with the first section (Tournament settings: location, dates, venue
+  hours, default match/gap minutes) as a real editable form. Thinnest section
+  slice; proves the section pattern before fanning out. First write operations.
+- **M2d+** — remaining plain-CRUD sections (Fields, Teams, Divisions), then
+  Groups, then Matches (slot_source wiring), then Standings/Bracket views.
+- **Later** — the guided wizard layer; M3 generators surfaced as in-UI helpers.
 - OpenAPI → TS type generation once the type surface justifies it.
 - Flip dist strategy to option B (gitignore + CI Node build) when stable.
 - Component tests (Vitest) once there is real interaction logic to cover.
