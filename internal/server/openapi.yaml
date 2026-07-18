@@ -363,12 +363,13 @@ components:
         id: {type: integer, readOnly: true}
         name: {type: string}
         location: {type: string}
-        starts_on: {type: string, nullable: true, description: ISO-8601 date}
-        ends_on: {type: string, nullable: true}
+        starts_on: {type: string, format: date, nullable: true, description: ISO-8601 date}
+        ends_on: {type: string, format: date, nullable: true}
         venue_opens: {type: string, nullable: true, description: 'HH:MM local'}
         venue_closes: {type: string, nullable: true}
         default_match_minutes: {type: integer, nullable: true}
         default_gap_minutes: {type: integer, nullable: true}
+        time_zone: {type: string, nullable: true, description: 'IANA timezone (e.g. Asia/Seoul); the single anchor for interpreting this tournament''s local times.'}
         created_at: {type: string, readOnly: true}
     Division:
       type: object
@@ -389,7 +390,7 @@ components:
         country: {type: string}
         contact: {type: string}
         notes: {type: string}
-        withdrawn_at: {type: string, nullable: true}
+        withdrawn_at: {type: string, nullable: true, description: 'naive local datetime YYYY-MM-DDTHH:MM (no offset; interpreted in the tournament time_zone).'}
         created_at: {type: string, readOnly: true}
     Field:
       type: object
@@ -408,8 +409,8 @@ components:
         team_id: {type: integer, nullable: true}
         kind: {type: string, default: booking, enum: [booking, blocked]}
         label: {type: string}
-        starts_at: {type: string, nullable: true}
-        ends_at: {type: string, nullable: true}
+        starts_at: {type: string, nullable: true, description: 'naive local datetime YYYY-MM-DDTHH:MM (no offset; interpreted in the tournament time_zone).'}
+        ends_at: {type: string, nullable: true, description: 'naive local datetime YYYY-MM-DDTHH:MM (no offset; interpreted in the tournament time_zone).'}
         notes: {type: string}
     GroupRank:
       type: object
@@ -446,7 +447,7 @@ components:
         group_id: {type: integer, nullable: true}
         label: {type: string}
         field_id: {type: integer, nullable: true}
-        scheduled_at: {type: string, nullable: true}
+        scheduled_at: {type: string, nullable: true, description: 'naive local datetime YYYY-MM-DDTHH:MM (no offset; interpreted in the tournament time_zone).'}
         duration_minutes: {type: integer, nullable: true}
         status: {type: string, default: scheduled, enum: [scheduled, playing, suspended, finished, forfeited, cancelled, invalidated]}
         referee_team_id: {type: integer, nullable: true}
