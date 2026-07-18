@@ -392,10 +392,10 @@ function confirmDelete() {
 
     <!-- Add / edit dialog -->
     <q-dialog v-model="dialog">
-      <q-card class="column" style="min-width: 340px; max-width: 95vw; max-height: 90vh">
+      <q-card style="min-width: 320px; max-width: 95vw">
         <q-card-section class="text-h6">{{ editing ? 'Edit match' : 'New match' }}</q-card-section>
         <q-separator />
-        <q-card-section class="col scroll q-pt-md">
+        <q-card-section class="q-pt-md" style="max-height: 60vh; overflow-y: auto">
           <div class="dialog-form">
           <q-input v-model="form.label" label="Label (optional)" />
           <q-select v-model="form.a_team_id" :options="teamOptions" label="Team A" emit-value map-options clearable />
