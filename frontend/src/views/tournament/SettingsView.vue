@@ -2,9 +2,11 @@
 // The tournament Settings section: an editable form over the Tournament fields,
 // with dirty-tracked Save/Discard. Values are validated + normalized server-side
 // (M2b·dt); native date/time inputs emit exactly the canonical formats.
-import { computed, ref, watch } from 'vue'
+import { ref } from 'vue'
+import { useQuasar } from 'quasar'
 import { useTournamentStore } from '@/store/tournament'
 
+const $q = useQuasar()
 const store = useTournamentStore()
 
 // All IANA zone names from the browser (no dependency); the backend validates
@@ -23,22 +25,18 @@ function filterZones(value: string, update: (fn: () => void) => void) {
   })
 }
 
-const saved = ref(false)
-// Show "Saved." only until the next edit; reset it when the loaded tournament
-// changes (the same view instance is reused across /t/:id).
-const showSaved = computed(() => saved.value && !store.dirty)
-watch(() => store.current?.id, () => { saved.value = false })
-
+// Feedback via a Notify toast (visible at the bottom regardless of scroll) — a
+// top-of-page banner is off-screen after saving from the bottom of a long form.
 async function onSave() {
-  saved.value = false
   await store.save()
-  if (!store.error) saved.value = true
+  if (store.error) $q.notify({ type: 'negative', message: store.error })
+  else $q.notify({ type: 'positive', message: 'Saved' })
 }
 </script>
 
 <template>
   <q-page padding>
-    <q-banner v-if="store.error" class="bg-negative text-white q-mb-md">
+    <q-banner v-if="store.error && !store.draft" class="bg-negative text-white q-mb-md">
       {{ store.error }}
     </q-banner>
 
@@ -46,10 +44,6 @@ async function onSave() {
 
     <template v-else-if="store.draft">
       <div class="text-h6 q-mb-md">Settings</div>
-
-      <q-banner v-if="showSaved" class="bg-positive text-white q-mb-md">
-        Saved.
-      </q-banner>
 
       <div class="settings-form">
         <q-input v-model="store.draft.name" label="Name" />
