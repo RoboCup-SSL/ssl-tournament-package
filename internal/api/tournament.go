@@ -13,6 +13,7 @@ type TournamentPatch struct {
 	VenueCloses         Opt[string] `json:"venue_closes"`
 	DefaultMatchMinutes Opt[int64]  `json:"default_match_minutes"`
 	DefaultGapMinutes   Opt[int64]  `json:"default_gap_minutes"`
+	TimeZone            Opt[string] `json:"time_zone"`
 }
 
 // applyTournamentPatch copies the set patch fields onto tournament.
@@ -23,10 +24,21 @@ func applyTournamentPatch(tournament *store.Tournament, patch TournamentPatch) *
 	if applyError := applyValue(patch.Location, &tournament.Location, "location"); applyError != nil {
 		return applyError
 	}
-	applyNullable(patch.StartsOn, &tournament.StartsOn)
-	applyNullable(patch.EndsOn, &tournament.EndsOn)
-	applyNullable(patch.VenueOpens, &tournament.VenueOpens)
-	applyNullable(patch.VenueCloses, &tournament.VenueCloses)
+	if applyError := applyNullableString(patch.StartsOn, &tournament.StartsOn, "starts_on", validDate); applyError != nil {
+		return applyError
+	}
+	if applyError := applyNullableString(patch.EndsOn, &tournament.EndsOn, "ends_on", validDate); applyError != nil {
+		return applyError
+	}
+	if applyError := applyNullableString(patch.VenueOpens, &tournament.VenueOpens, "venue_opens", validClock); applyError != nil {
+		return applyError
+	}
+	if applyError := applyNullableString(patch.VenueCloses, &tournament.VenueCloses, "venue_closes", validClock); applyError != nil {
+		return applyError
+	}
+	if applyError := applyNullableString(patch.TimeZone, &tournament.TimeZone, "time_zone", validZone); applyError != nil {
+		return applyError
+	}
 	applyNullable(patch.DefaultMatchMinutes, &tournament.DefaultMatchMinutes)
 	applyNullable(patch.DefaultGapMinutes, &tournament.DefaultGapMinutes)
 	return nil

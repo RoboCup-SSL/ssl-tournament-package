@@ -93,9 +93,9 @@ func TestTeamCRUD(t *testing.T) {
 	seedBase(t, testServer)
 	exerciseCRUD(t, testServer, "/api/teams",
 		`{"tournament_id": 1, "division_id": 1, "name": "Gamma", "country": "NL"}`,
-		`{"division_id": null, "withdrawn_at": "2026-07-15T09:00:00Z"}`,
+		`{"division_id": null, "withdrawn_at": "2026-07-15T09:00:00"}`,
 		map[string]any{"name": "Gamma", "division_id": nil,
-			"withdrawn_at": "2026-07-15T09:00:00Z"})
+			"withdrawn_at": "2026-07-15T09:00"})
 	filterCount(t, testServer, "/api/teams?division_id=1", 2)
 	filterCount(t, testServer, "/api/teams?tournament_id=1&division_id=1", 2)
 	filterCount(t, testServer, "/api/teams?division_id=99", 0)
@@ -116,7 +116,7 @@ func TestFieldBookingCRUD(t *testing.T) {
 	seedBase(t, testServer)
 	status, body := doRequest(t, testServer, "POST", "/api/field-bookings",
 		`{"tournament_id": 1, "field_id": 1, "team_id": 1, "label": "practice",
-		  "starts_at": "2026-07-15T09:00:00Z", "ends_at": "2026-07-15T10:00:00Z"}`)
+		  "starts_at": "2026-07-15T09:00:00", "ends_at": "2026-07-15T10:00:00"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("create booking: %d %s", status, body)
 	}

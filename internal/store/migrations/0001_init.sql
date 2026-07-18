@@ -14,6 +14,7 @@ CREATE TABLE tournament (
   -- Japan Open: 45. Per-match override: match.duration_minutes.
   default_match_minutes INTEGER,          -- planned slot length per match
   default_gap_minutes   INTEGER,          -- turnaround between matches on a field
+  time_zone   TEXT,                        -- IANA timezone anchor (e.g. Asia/Seoul), nullable
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 

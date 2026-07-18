@@ -11,3 +11,7 @@ Thumbs.db
 /release/
 /ssl-tournament
 /ssl-tournament.exe
+
+# Frontend
+/frontend/node_modules/
+*.tsbuildinfo

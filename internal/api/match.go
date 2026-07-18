@@ -51,7 +51,9 @@ func applyMatchPatch(match *store.Match, patch MatchPatch) *Error {
 		return applyError
 	}
 	applyNullable(patch.FieldID, &match.FieldID)
-	applyNullable(patch.ScheduledAt, &match.ScheduledAt)
+	if e := applyNullableString(patch.ScheduledAt, &match.ScheduledAt, "scheduled_at", validNaiveTime); e != nil {
+		return e
+	}
 	applyNullable(patch.DurationMinutes, &match.DurationMinutes)
 	if applyError := applyValue(patch.Status, &match.Status, "status"); applyError != nil {
 		return applyError

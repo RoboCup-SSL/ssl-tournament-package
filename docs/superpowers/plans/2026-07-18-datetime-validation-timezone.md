@@ -162,7 +162,7 @@ func TestValidators(t *testing.T) {
 		wantOK  bool
 	}{
 		{"date ok", validDate, "2026-07-15", "2026-07-15", true},
-		{"date normalizes", validDate, "2026-7-5", "2026-07-05", true},
+		{"date requires 2-digit parts", validDate, "2026-7-5", "", false},
 		{"date bad month", validDate, "2026-13-40", "", false},
 		{"date junk", validDate, "banana", "", false},
 		{"clock ok", validClock, "08:00", "08:00", true},
@@ -288,9 +288,9 @@ func TestTournamentDateTimeValidation(t *testing.T) {
 	if zoneErr == nil || zoneErr.Field != "time_zone" {
 		t.Fatalf("bad zone: got %+v, want time_zone", zoneErr)
 	}
-	// good values normalize; empty clears
+	// good values accepted; clock normalizes (8:00 -> 08:00); empty clears
 	ok, okErr := UpdateTournament(store, created.ID, TournamentPatch{
-		StartsOn: set("2026-7-5"), VenueOpens: set("8:00"), TimeZone: set("Asia/Seoul"),
+		StartsOn: set("2026-07-05"), VenueOpens: set("8:00"), TimeZone: set("Asia/Seoul"),
 	})
 	if okErr != nil {
 		t.Fatalf("good update: %v", okErr)
