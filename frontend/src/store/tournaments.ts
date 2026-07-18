@@ -23,5 +23,18 @@ export const useTournamentsStore = defineStore('tournaments', {
         this.loading = false
       }
     },
+    // create adds a tournament (name only) and refreshes the list; returns the
+    // created row so the caller can navigate into it, or null on failure.
+    async create(name: string): Promise<Tournament | null> {
+      this.error = ''
+      try {
+        const created = await api.post<Tournament>('/api/tournaments', { name })
+        await this.fetch()
+        return created
+      } catch (failure) {
+        this.error = failure instanceof Error ? failure.message : String(failure)
+        return null
+      }
+    },
   },
 })
