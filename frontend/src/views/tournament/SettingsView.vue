@@ -2,11 +2,13 @@
 // The tournament Settings section: an editable form over the Tournament fields,
 // with dirty-tracked Save/Discard. Values are validated + normalized server-side
 // (M2b·dt); native date/time inputs emit exactly the canonical formats.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useTournamentStore } from '@/store/tournament'
 
 const $q = useQuasar()
+const router = useRouter()
 const store = useTournamentStore()
 
 // All IANA zone names from the browser (no dependency); the backend validates
@@ -31,6 +33,33 @@ async function onSave() {
   await store.save()
   if (store.error) $q.notify({ type: 'negative', message: store.error })
   else $q.notify({ type: 'positive', message: 'Saved' })
+}
+
+// Delete requires typing the tournament's exact name — no accidental deletes.
+const deleteDialog = ref(false)
+const deleteConfirm = ref('')
+const deleting = ref(false)
+const canDelete = computed(() => !!store.current && deleteConfirm.value === store.current.name)
+
+function openDelete() {
+  deleteConfirm.value = ''
+  deleteDialog.value = true
+}
+async function onDelete() {
+  if (!canDelete.value) return
+  deleting.value = true
+  try {
+    const ok = await store.remove()
+    if (ok) {
+      deleteDialog.value = false
+      $q.notify({ type: 'positive', message: 'Tournament deleted' })
+      void router.push('/')
+    } else {
+      $q.notify({ type: 'negative', message: store.error || 'Delete failed' })
+    }
+  } finally {
+    deleting.value = false
+  }
 }
 </script>
 
@@ -80,6 +109,40 @@ async function onSave() {
           <q-btn flat label="Discard" :disable="!store.dirty" @click="store.discard" />
         </div>
       </div>
+
+      <q-separator class="q-my-lg" />
+      <div class="danger-zone">
+        <div class="text-subtitle2 text-negative q-mb-xs">Danger zone</div>
+        <div class="text-caption text-grey q-mb-sm">
+          Permanently removes this tournament and everything in it — fields, teams, matches, and
+          results. This cannot be undone.
+        </div>
+        <q-btn outline color="negative" icon="delete" label="Delete tournament" @click="openDelete" />
+      </div>
+
+      <q-dialog v-model="deleteDialog">
+        <q-card style="min-width: 320px; max-width: 95vw">
+          <q-card-section class="text-h6 text-negative">Delete tournament</q-card-section>
+          <q-card-section class="q-pt-none">
+            <p class="q-mb-sm">
+              This permanently deletes <b>{{ store.current?.name }}</b> and all its fields, teams,
+              matches, and results. This cannot be undone.
+            </p>
+            <p class="q-mb-xs text-caption">Type the tournament name to confirm:</p>
+            <q-input
+              v-model="deleteConfirm"
+              dense
+              autofocus
+              :placeholder="store.current?.name"
+              @keyup.enter="onDelete"
+            />
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn v-close-popup flat label="Cancel" />
+            <q-btn color="negative" label="Delete" :disable="!canDelete" :loading="deleting" @click="onDelete" />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
     </template>
   </q-page>
 </template>
@@ -104,5 +167,8 @@ async function onSave() {
 .actions {
   display: flex;
   gap: 8px;
+}
+.danger-zone {
+  max-width: 480px;
 }
 </style>

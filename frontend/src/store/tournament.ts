@@ -108,5 +108,18 @@ export const useTournamentStore = defineStore('tournament', {
     discard() {
       if (this.current) this.draft = toDraft(this.current)
     },
+    // remove deletes the current tournament and everything it owns (server-side
+    // cascade). Returns true on success.
+    async remove(): Promise<boolean> {
+      if (!this.current) return false
+      this.error = ''
+      try {
+        await api.del(`/api/tournaments/${this.current.id}`)
+        return true
+      } catch (failure) {
+        this.error = failure instanceof Error ? failure.message : String(failure)
+        return false
+      }
+    },
   },
 })

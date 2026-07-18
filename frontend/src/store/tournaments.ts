@@ -36,16 +36,5 @@ export const useTournamentsStore = defineStore('tournaments', {
         return null
       }
     },
-    // remove deletes a tournament and everything it owns (server-side cascade),
-    // then refreshes the list.
-    async remove(id: number) {
-      this.error = ''
-      try {
-        await api.del(`/api/tournaments/${id}`)
-        await this.fetch()
-      } catch (failure) {
-        this.error = failure instanceof Error ? failure.message : String(failure)
-      }
-    },
   },
 })

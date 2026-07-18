@@ -2,13 +2,10 @@
 // Instance landing: lists tournaments, creates new ones, opens one's workspace.
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useQuasar } from 'quasar'
 import { useTournamentsStore } from '@/store/tournaments'
-import type { Tournament } from '@/api/types'
 
 const store = useTournamentsStore()
 const router = useRouter()
-const $q = useQuasar()
 
 const dialog = ref(false)
 const newName = ref('')
@@ -24,22 +21,6 @@ function openDialog() {
 
 function open(id: number) {
   void router.push({ name: 'matches', params: { id } })
-}
-
-function confirmDelete(t: Tournament) {
-  $q.dialog({
-    title: 'Delete tournament',
-    message: `Delete "${t.name || 'this tournament'}" and everything in it (fields, teams, matches)? This cannot be undone.`,
-    cancel: true,
-    ok: { label: 'Delete', color: 'negative' },
-  }).onOk(async () => {
-    await store.remove(t.id)
-    $q.notify(
-      store.error
-        ? { type: 'negative', message: store.error }
-        : { type: 'positive', message: 'Deleted' },
-    )
-  })
 }
 
 async function create() {
@@ -81,10 +62,7 @@ async function create() {
           </q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row items-center no-wrap">
-            <q-btn flat round dense icon="delete" color="negative" @click.stop="confirmDelete(t)" />
-            <q-icon name="chevron_right" />
-          </div>
+          <q-icon name="chevron_right" />
         </q-item-section>
       </q-item>
     </q-list>
