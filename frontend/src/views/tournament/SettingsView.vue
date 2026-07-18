@@ -51,18 +51,18 @@ async function onSave() {
         Saved.
       </q-banner>
 
-      <div class="column q-gutter-md" style="max-width: 480px">
+      <div class="settings-form">
         <q-input v-model="store.draft.name" label="Name" />
         <q-input v-model="store.draft.location" label="Location" />
 
-        <div class="row q-col-gutter-md">
-          <q-input class="col" v-model="store.draft.starts_on" label="Starts on" type="date" stack-label />
-          <q-input class="col" v-model="store.draft.ends_on" label="Ends on" type="date" stack-label />
+        <div class="field-row">
+          <q-input v-model="store.draft.starts_on" label="Starts on" type="date" stack-label />
+          <q-input v-model="store.draft.ends_on" label="Ends on" type="date" stack-label />
         </div>
 
-        <div class="row q-col-gutter-md">
-          <q-input class="col" v-model="store.draft.venue_opens" label="Venue opens" type="time" stack-label />
-          <q-input class="col" v-model="store.draft.venue_closes" label="Venue closes" type="time" stack-label />
+        <div class="field-row">
+          <q-input v-model="store.draft.venue_opens" label="Venue opens" type="time" stack-label />
+          <q-input v-model="store.draft.venue_closes" label="Venue closes" type="time" stack-label />
         </div>
 
         <q-select
@@ -76,12 +76,12 @@ async function onSave() {
           @filter="filterZones"
         />
 
-        <div class="row q-col-gutter-md">
-          <q-input class="col" v-model="store.draft.default_match_minutes" label="Default match minutes" type="number" />
-          <q-input class="col" v-model="store.draft.default_gap_minutes" label="Default gap minutes" type="number" />
+        <div class="field-row">
+          <q-input v-model="store.draft.default_match_minutes" label="Default match minutes" type="number" />
+          <q-input v-model="store.draft.default_gap_minutes" label="Default gap minutes" type="number" />
         </div>
 
-        <div class="row q-gutter-sm">
+        <div class="actions">
           <q-btn color="primary" label="Save" :disable="!store.dirty" :loading="store.saving" @click="onSave" />
           <q-btn flat label="Discard" :disable="!store.dirty" @click="store.discard" />
         </div>
@@ -89,3 +89,26 @@ async function onSave() {
     </template>
   </q-page>
 </template>
+
+<style scoped>
+/* Plain flex + gap, no Quasar negative-margin gutters (which overflow the left
+   edge on narrow screens). Paired fields wrap to stacked on phones. */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+}
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.field-row > * {
+  flex: 1 1 180px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+}
+</style>
