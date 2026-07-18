@@ -315,11 +315,16 @@ function blankForm(): Form {
   }
 }
 
-// Fill end = start + the tournament's match duration when the user sets a start
-// and no end yet; overridable for any length.
+// End auto-follows the start (start + the tournament's match duration) until the
+// user edits End themselves; then it's left alone. Robust to q-time's progressive
+// hour-then-minute updates (recomputes on each, so 09:30 → end reflects :30).
+const endTouched = ref(false)
 function onStartTimeChange(value: string | number | null) {
   const start = typeof value === 'string' ? value : ''
-  if (start && !form.value.endTime) form.value.endTime = addMinutes(start, defaultDuration())
+  if (start && !endTouched.value) form.value.endTime = addMinutes(start, defaultDuration())
+}
+function onEndTimeChange() {
+  endTouched.value = true
 }
 
 const dialog = ref(false)
@@ -330,6 +335,7 @@ const busy = ref(false)
 function openAdd(prefill?: { field_id?: number; time?: string }) {
   editing.value = null
   form.value = blankForm()
+  endTouched.value = false
   if (prefill?.field_id != null) form.value.field_id = prefill.field_id
   if (prefill?.time) {
     form.value.date = selectedDay.value || form.value.date
@@ -355,6 +361,7 @@ function openEdit(m: Match) {
     b_score: m.b_score?.toString() ?? '',
     winner_team_id: m.winner_team_id,
   }
+  endTouched.value = m.duration_minutes != null
   dialog.value = true
 }
 
@@ -560,7 +567,7 @@ onBeforeUnmount(() => {
             <q-input v-model="form.date" label="Date" type="date" stack-label />
             <div class="dialog-row">
               <TimeField v-model="form.time" label="Start time" @update:model-value="onStartTimeChange" />
-              <TimeField v-model="form.endTime" label="End time" />
+              <TimeField v-model="form.endTime" label="End time" @update:model-value="onEndTimeChange" />
             </div>
             <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
             <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
