@@ -23,7 +23,7 @@ function openDialog() {
 }
 
 function open(id: number) {
-  void router.push({ name: 'settings', params: { id } })
+  void router.push({ name: 'matches', params: { id } })
 }
 
 function confirmDelete(t: Tournament) {

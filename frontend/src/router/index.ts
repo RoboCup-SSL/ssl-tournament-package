@@ -15,7 +15,7 @@ const router = createRouter({
     { path: '/t/:id/fields', name: 'fields', component: FieldsView },
     { path: '/t/:id/teams', name: 'teams', component: TeamsView },
     { path: '/t/:id/matches', name: 'matches', component: ScheduleView },
-    { path: '/t/:id', redirect: (to) => ({ name: 'settings', params: { id: to.params.id } }) },
+    { path: '/t/:id', redirect: (to) => ({ name: 'matches', params: { id: to.params.id } }) },
   ],
 })
 
