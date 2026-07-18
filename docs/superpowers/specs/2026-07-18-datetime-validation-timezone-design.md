@@ -110,12 +110,10 @@ Values are otherwise unrestricted — no window, ordering, or cross-field checks
 
 ### Store (`internal/store`)
 
-- **Migration** `internal/store/migrations/0002_tournament_timezone.sql`:
-  ```sql
-  ALTER TABLE tournament ADD COLUMN time_zone TEXT;  -- IANA zone, nullable
-  ```
-  The runner (`migrate.go`) applies numbered files in filename order past
-  `PRAGMA user_version`, so `0002_*` runs once on existing databases.
+- **Schema** — pre-release (data is disposable, no deployed users), so the column
+  is added directly to the base schema `internal/store/migrations/0001_init.sql`
+  (`time_zone TEXT` on the `tournament` table) rather than as an incremental
+  migration. Recreate local databases instead of migrating. No `0002_*` file.
 - **`Tournament` struct** (`store/tournament.go`): add `TimeZone *string
   \`json:"time_zone"\`` (nullable pointer, placed after `DefaultGapMinutes`).
 - **SQL** — add `time_zone` to all four statements, in the same position:
@@ -194,8 +192,8 @@ minimal hosts.
   (e.g. `PATCH /api/tournaments/{id}` with bad `starts_on` → 400 envelope with
   `field: "starts_on"`; with a good value → 200 normalized; a real `time_zone`
   → 200; a bogus zone → 400).
-- **Migration** — a store test that `0002` applies and `time_zone` round-trips
-  (set, read back, clear).
+- **Schema** — a store test that `time_zone` round-trips (set, read back, clear)
+  against a freshly created database.
 - `go test ./...`, `go vet ./...` green.
 
 ## What stays freeform
