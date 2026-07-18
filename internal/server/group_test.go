@@ -25,7 +25,7 @@ func TestGroupCRUD(t *testing.T) {
 
 	status, body = doRequest(t, testServer, "PATCH", "/api/groups/1",
 		`{"ranking": [{"team_id": 2, "rank": 1}, {"team_id": 1, "rank": 1}],
-		  "ranking_confirmed_at": "2026-07-16T18:00:00Z"}`)
+		  "ranking_confirmed_at": "2026-07-16T18:00:00"}`)
 	if status != http.StatusOK {
 		t.Fatalf("patch ranking: %d %s", status, body)
 	}

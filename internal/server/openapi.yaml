@@ -366,7 +366,7 @@ components:
         starts_on: {type: string, format: date, nullable: true, description: ISO-8601 date}
         ends_on: {type: string, format: date, nullable: true}
         venue_opens: {type: string, nullable: true, description: 'HH:MM local'}
-        venue_closes: {type: string, nullable: true}
+        venue_closes: {type: string, nullable: true, description: 'HH:MM local'}
         default_match_minutes: {type: integer, nullable: true}
         default_gap_minutes: {type: integer, nullable: true}
         time_zone: {type: string, nullable: true, description: 'IANA timezone (e.g. Asia/Seoul); the single anchor for interpreting this tournament''s local times.'}
@@ -426,7 +426,7 @@ components:
         division_id: {type: integer, nullable: true}
         name: {type: string}
         notes: {type: string}
-        ranking_confirmed_at: {type: string, nullable: true}
+        ranking_confirmed_at: {type: string, nullable: true, description: 'naive local datetime YYYY-MM-DDTHH:MM (no offset; interpreted in the tournament time_zone).'}
         member_team_ids: {type: array, items: {type: integer}}
         ranking: {type: array, items: {$ref: '#/components/schemas/GroupRank'}}
     SlotSource:
