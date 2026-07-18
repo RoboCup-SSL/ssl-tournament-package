@@ -58,3 +58,28 @@ func TestTournamentCRUD(t *testing.T) {
 		t.Fatalf("second delete: err = %v, want ErrNotFound", err)
 	}
 }
+
+// TestTournamentTimeZoneRoundTrip verifies time_zone is persisted and can be cleared.
+func TestTournamentTimeZoneRoundTrip(t *testing.T) {
+	store := openTestStore(t)
+	zone := "Asia/Seoul"
+	tournament := &Tournament{Name: "TZ", TimeZone: &zone}
+	if err := store.CreateTournament(tournament); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := store.GetTournament(tournament.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.TimeZone == nil || *got.TimeZone != "Asia/Seoul" {
+		t.Fatalf("time_zone = %v, want Asia/Seoul", got.TimeZone)
+	}
+	got.TimeZone = nil
+	if err := store.UpdateTournament(got); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	again, _ := store.GetTournament(tournament.ID)
+	if again.TimeZone != nil {
+		t.Fatalf("time_zone = %v, want nil after clear", again.TimeZone)
+	}
+}

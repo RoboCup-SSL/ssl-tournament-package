@@ -18,6 +18,7 @@ type Tournament struct {
 	VenueCloses         *string `json:"venue_closes"`
 	DefaultMatchMinutes *int64  `json:"default_match_minutes"`
 	DefaultGapMinutes   *int64  `json:"default_gap_minutes"`
+	TimeZone            *string `json:"time_zone"`
 	CreatedAt           string  `json:"created_at"`
 }
 
@@ -25,11 +26,11 @@ type Tournament struct {
 func (s *Store) CreateTournament(tournament *Tournament) error {
 	result, err := s.db.Exec(`INSERT INTO tournament
 		(name, location, starts_on, ends_on, venue_opens, venue_closes,
-		 default_match_minutes, default_gap_minutes)
-		VALUES (?,?,?,?,?,?,?,?)`,
+		 default_match_minutes, default_gap_minutes, time_zone)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
 		tournament.Name, tournament.Location, tournament.StartsOn, tournament.EndsOn,
 		tournament.VenueOpens, tournament.VenueCloses,
-		tournament.DefaultMatchMinutes, tournament.DefaultGapMinutes)
+		tournament.DefaultMatchMinutes, tournament.DefaultGapMinutes, tournament.TimeZone)
 	if err != nil {
 		return translate(err)
 	}
@@ -46,12 +47,12 @@ func (s *Store) CreateTournament(tournament *Tournament) error {
 func (s *Store) GetTournament(id int64) (*Tournament, error) {
 	tournament := Tournament{ID: id}
 	err := s.db.QueryRow(`SELECT name, location, starts_on, ends_on, venue_opens,
-		venue_closes, default_match_minutes, default_gap_minutes, created_at
+		venue_closes, default_match_minutes, default_gap_minutes, time_zone, created_at
 		FROM tournament WHERE id = ?`, id).
 		Scan(&tournament.Name, &tournament.Location, &tournament.StartsOn,
 			&tournament.EndsOn, &tournament.VenueOpens, &tournament.VenueCloses,
 			&tournament.DefaultMatchMinutes, &tournament.DefaultGapMinutes,
-			&tournament.CreatedAt)
+			&tournament.TimeZone, &tournament.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -65,7 +66,7 @@ func (s *Store) GetTournament(id int64) (*Tournament, error) {
 func (s *Store) ListTournaments() ([]Tournament, error) {
 	rows, err := s.db.Query(`SELECT id, name, location, starts_on, ends_on,
 		venue_opens, venue_closes, default_match_minutes, default_gap_minutes,
-		created_at FROM tournament ORDER BY id`)
+		time_zone, created_at FROM tournament ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,8 @@ func (s *Store) ListTournaments() ([]Tournament, error) {
 		if err := rows.Scan(&tournament.ID, &tournament.Name, &tournament.Location,
 			&tournament.StartsOn, &tournament.EndsOn, &tournament.VenueOpens,
 			&tournament.VenueCloses, &tournament.DefaultMatchMinutes,
-			&tournament.DefaultGapMinutes, &tournament.CreatedAt); err != nil {
+			&tournament.DefaultGapMinutes, &tournament.TimeZone,
+			&tournament.CreatedAt); err != nil {
 			return nil, err
 		}
 		tournaments = append(tournaments, tournament)
@@ -88,10 +90,11 @@ func (s *Store) ListTournaments() ([]Tournament, error) {
 func (s *Store) UpdateTournament(tournament *Tournament) error {
 	result, err := s.db.Exec(`UPDATE tournament SET name=?, location=?,
 		starts_on=?, ends_on=?, venue_opens=?, venue_closes=?,
-		default_match_minutes=?, default_gap_minutes=? WHERE id=?`,
+		default_match_minutes=?, default_gap_minutes=?, time_zone=? WHERE id=?`,
 		tournament.Name, tournament.Location, tournament.StartsOn, tournament.EndsOn,
 		tournament.VenueOpens, tournament.VenueCloses,
-		tournament.DefaultMatchMinutes, tournament.DefaultGapMinutes, tournament.ID)
+		tournament.DefaultMatchMinutes, tournament.DefaultGapMinutes,
+		tournament.TimeZone, tournament.ID)
 	if err != nil {
 		return translate(err)
 	}
