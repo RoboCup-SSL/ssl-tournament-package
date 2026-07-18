@@ -12,16 +12,21 @@ export const useTeamsStore = defineStore('teams', {
     error: '',
   }),
   actions: {
-    async fetch(tournamentId: number) {
+    // A silent fetch (polling) skips loading/error UI and only reassigns items
+    // when they changed, so an unchanged poll triggers no re-render.
+    async fetch(tournamentId: number, silent = false) {
       this.tournamentId = tournamentId
-      this.loading = true
-      this.error = ''
+      if (!silent) {
+        this.loading = true
+        this.error = ''
+      }
       try {
-        this.items = await api.get<Team[]>(`/api/teams?tournament_id=${tournamentId}`)
+        const items = await api.get<Team[]>(`/api/teams?tournament_id=${tournamentId}`)
+        if (JSON.stringify(items) !== JSON.stringify(this.items)) this.items = items
       } catch (failure) {
-        this.error = failure instanceof Error ? failure.message : String(failure)
+        if (!silent) this.error = failure instanceof Error ? failure.message : String(failure)
       } finally {
-        this.loading = false
+        if (!silent) this.loading = false
       }
     },
     async create(input: TeamInput) {

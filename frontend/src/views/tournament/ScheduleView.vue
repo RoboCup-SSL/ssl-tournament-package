@@ -3,7 +3,7 @@
 // continuous vertical time axis; each match is a block positioned by its start
 // and sized by its duration. Click empty space to add, click a block to edit,
 // drag a block (desktop) to move it to another field/time.
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useMatchesStore } from '@/store/matches'
@@ -394,6 +394,32 @@ function confirmDelete() {
     }
   })
 }
+
+// --- live updates: silently poll every 7s and on tab focus, so a second viewer
+// sees another's edits within seconds. Skipped while editing/dragging so the
+// user's own interaction isn't disrupted; stores only re-render on real change.
+function refresh() {
+  if (dialog.value || dragId.value != null) return
+  const id = Number(route.params.id)
+  if (!id) return
+  void matches.fetch(id, true)
+  void fields.fetch(id, true)
+  void teams.fetch(id, true)
+}
+function onVisible() {
+  if (document.visibilityState === 'visible') refresh()
+}
+let pollTimer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  pollTimer = setInterval(refresh, 7000)
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('focus', onVisible)
+})
+onBeforeUnmount(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('focus', onVisible)
+})
 </script>
 
 <template>
