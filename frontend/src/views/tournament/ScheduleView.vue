@@ -1,6 +1,8 @@
 <script setup lang="ts">
-// The schedule grid (MVP): matches on a time × field grid for a selected day.
-// Drag a card to move it (desktop); tap a card to edit/move it (everywhere).
+// The schedule (MVP): a Google-Calendar-style day view. Columns = fields, a
+// continuous vertical time axis; each match is a block positioned by its start
+// and sized by its duration. Click empty space to add, click a block to edit,
+// drag a block (desktop) to move it to another field/time.
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
@@ -43,15 +45,6 @@ function fmtHM(mins: number): string {
 function addMinutes(hm: string, mins: number): string {
   return fmtHM(Math.max(0, Math.min(parseHM(hm) + mins, 24 * 60 - 1)))
 }
-// The tournament's per-match duration (frontend default for a new match's end).
-function defaultDuration(): number {
-  return tournament.current?.default_match_minutes || 60
-}
-// The end time of a scheduled match with a duration, for display on its card.
-function matchEnd(m: Match): string {
-  if (!m.scheduled_at || !m.duration_minutes) return ''
-  return addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes)
-}
 function todayISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -61,8 +54,11 @@ function nextDay(iso: string): string {
   dt.setUTCDate(dt.getUTCDate() + 1)
   return dt.toISOString().slice(0, 10)
 }
+function defaultDuration(): number {
+  return tournament.current?.default_match_minutes || 60
+}
 
-// --- days (columns of the day selector) ---
+// --- days ---
 const days = computed<string[]>(() => {
   const set = new Set<string>()
   for (const m of matches.items) if (m.scheduled_at) set.add(m.scheduled_at.slice(0, 10))
@@ -90,9 +86,8 @@ watch(
   { immediate: true },
 )
 
-// --- time rows for the selected day ---
-// Grid row granularity in minutes — a display/placement choice, independent of
-// how long a match lasts. The user picks it; defaults to 30.
+// --- calendar geometry ---
+const PX_PER_MIN = 1
 const interval = ref(30)
 const intervalOptions = [
   { label: '15m', value: 15 },
@@ -100,59 +95,152 @@ const intervalOptions = [
   { label: '60m', value: 60 },
 ]
 
-const times = computed<string[]>(() => {
-  const set = new Set<string>()
+function onDay(m: Match): boolean {
+  return !!m.scheduled_at && m.scheduled_at.slice(0, 10) === selectedDay.value
+}
+
+// The vertical span shown: the venue hours, widened to include every match on
+// the day (start .. start+duration), snapped out to whole hours.
+const dayBounds = computed(() => {
   const t = tournament.current
-  const open = parseHM(t?.venue_opens || '08:00')
-  const close = parseHM(t?.venue_closes || '20:00')
-  for (let mins = open; mins <= close && set.size < 200; mins += interval.value) set.add(fmtHM(mins))
+  let start = parseHM(t?.venue_opens || '08:00')
+  let end = parseHM(t?.venue_closes || '20:00')
   for (const m of matches.items) {
-    if (m.scheduled_at && m.scheduled_at.slice(0, 10) === selectedDay.value) {
-      set.add(m.scheduled_at.slice(11, 16))
-    }
+    if (!onDay(m)) continue
+    const s = parseHM(m.scheduled_at!.slice(11, 16))
+    const e = s + (m.duration_minutes || defaultDuration())
+    if (s < start) start = s
+    if (e > end) end = e
   }
-  return Array.from(set).sort()
+  start = Math.floor(start / 60) * 60
+  end = Math.ceil(end / 60) * 60
+  if (end <= start) end = start + 60
+  return { start, end }
+})
+
+const totalHeight = computed(() => (dayBounds.value.end - dayBounds.value.start) * PX_PER_MIN)
+
+const gridLines = computed(() => {
+  const { start, end } = dayBounds.value
+  const lines: { top: number; label: string }[] = []
+  for (let m = start; m <= end; m += interval.value) {
+    lines.push({ top: (m - start) * PX_PER_MIN, label: fmtHM(m) })
+  }
+  return lines
 })
 
 const fieldList = computed(() => fields.items)
 const unscheduled = computed(() => matches.items.filter((m) => m.field_id == null || m.scheduled_at == null))
 
-function cellMatches(fieldId: number, time: string): Match[] {
-  const at = `${selectedDay.value}T${time}`
-  return matches.items.filter((m) => m.field_id === fieldId && m.scheduled_at === at)
+interface Block {
+  m: Match
+  top: number
+  height: number
+  lane: number
+  lanes: number
+}
+
+// Positioned blocks for one field on the selected day, with side-by-side lanes
+// for overlapping matches (classic calendar packing).
+function fieldBlocks(fieldId: number): Block[] {
+  const { start } = dayBounds.value
+  const events = matches.items
+    .filter((m) => m.field_id === fieldId && onDay(m))
+    .map((m) => {
+      const s = parseHM(m.scheduled_at!.slice(11, 16))
+      const e = s + Math.max(m.duration_minutes || defaultDuration(), 15)
+      return { m, s, e }
+    })
+    .sort((a, b) => a.s - b.s || a.e - b.e)
+
+  const blocks: Block[] = []
+  let cluster: typeof events = []
+  let clusterEnd = -1
+  const flush = () => {
+    if (!cluster.length) return
+    const laneEnds: number[] = []
+    const placed = cluster.map((ev) => {
+      let lane = laneEnds.findIndex((end) => end <= ev.s)
+      if (lane === -1) {
+        lane = laneEnds.length
+        laneEnds.push(ev.e)
+      } else {
+        laneEnds[lane] = ev.e
+      }
+      return { ev, lane }
+    })
+    for (const { ev, lane } of placed) {
+      blocks.push({
+        m: ev.m,
+        top: (ev.s - start) * PX_PER_MIN,
+        height: (ev.e - ev.s) * PX_PER_MIN,
+        lane,
+        lanes: laneEnds.length,
+      })
+    }
+    cluster = []
+  }
+  for (const ev of events) {
+    if (cluster.length && ev.s >= clusterEnd) flush()
+    clusterEnd = cluster.length === 0 ? ev.e : Math.max(clusterEnd, ev.e)
+    cluster.push(ev)
+  }
+  flush()
+  return blocks
+}
+
+function blockStyle(b: Block) {
+  const widthPct = 100 / b.lanes
+  return {
+    top: `${b.top}px`,
+    height: `${Math.max(b.height, 18)}px`,
+    left: `calc(${b.lane * widthPct}% + 1px)`,
+    width: `calc(${widthPct}% - 3px)`,
+  }
 }
 
 function teamName(id: number | null): string {
   if (id == null) return '—'
   return teams.items.find((t) => t.id === id)?.name || `#${id}`
 }
-
-// A card's title: the matchup if either team is set, else the label or #id so a
-// teamless match is still identifiable.
 function matchTitle(m: Match): string {
   if (m.a_team_id != null || m.b_team_id != null) {
     return `${teamName(m.a_team_id)} vs ${teamName(m.b_team_id)}`
   }
   return m.label || `Match #${m.id}`
 }
-
-function statusColor(status: string): string {
-  if (status === 'finished') return 'positive'
-  if (status === 'playing') return 'orange'
-  if (status === 'cancelled' || status === 'invalidated') return 'grey'
-  return 'primary'
+function matchEnd(m: Match): string {
+  if (!m.scheduled_at || !m.duration_minutes) return ''
+  return addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes)
+}
+function matchRange(m: Match): string {
+  if (!m.scheduled_at) return ''
+  const s = m.scheduled_at.slice(11, 16)
+  return `${s}–${addMinutes(s, m.duration_minutes || defaultDuration())}`
 }
 
-// --- drag to move (desktop) ---
+// map a pointer Y within a column to a snapped time string
+function timeAtY(el: HTMLElement, clientY: number): string {
+  const y = clientY - el.getBoundingClientRect().top
+  const raw = dayBounds.value.start + y / PX_PER_MIN
+  const snapped = Math.round(raw / interval.value) * interval.value
+  return fmtHM(Math.max(dayBounds.value.start, Math.min(snapped, dayBounds.value.end)))
+}
+
+function onColClick(event: MouseEvent, fieldId: number) {
+  openAdd({ field_id: fieldId, time: timeAtY(event.currentTarget as HTMLElement, event.clientY) })
+}
+
+// --- drag to move ---
 const dragId = ref<number | null>(null)
 function onDragStart(id: number) {
   dragId.value = id
 }
-async function onDropCell(fieldId: number, time: string) {
+async function onDropCol(event: DragEvent, fieldId: number) {
   const id = dragId.value
   dragId.value = null
   if (id == null) return
-  const at = `${selectedDay.value}T${time}`
+  const at = `${selectedDay.value}T${timeAtY(event.currentTarget as HTMLElement, event.clientY)}`
   const dragged = matches.items.find((m) => m.id === id)
   if (dragged && dragged.field_id === fieldId && dragged.scheduled_at === at) return
   await matches.update(id, { field_id: fieldId, scheduled_at: at })
@@ -188,21 +276,12 @@ interface Form {
   status: string
 }
 
-// When the user sets the start and no end is set yet, fill end = start + the
-// tournament's match duration. They can then override it for any length.
-function onStartTimeChange(value: string | number | null) {
-  const start = typeof value === 'string' ? value : ''
-  if (start && !form.value.endTime) form.value.endTime = addMinutes(start, defaultDuration())
-}
-
 function blankForm(): Form {
   return {
     label: '',
     a_team_id: null,
     b_team_id: null,
     field_id: null,
-    // Default a new match to the event's start date (or, in a multi-day event,
-    // the day currently in view) — not today.
     date: tournament.current?.starts_on || selectedDay.value || '',
     time: '',
     endTime: '',
@@ -210,6 +289,13 @@ function blankForm(): Form {
     assistant_referee_team_id: null,
     status: 'scheduled',
   }
+}
+
+// Fill end = start + the tournament's match duration when the user sets a start
+// and no end yet; overridable for any length.
+function onStartTimeChange(value: string | number | null) {
+  const start = typeof value === 'string' ? value : ''
+  if (start && !form.value.endTime) form.value.endTime = addMinutes(start, defaultDuration())
 }
 
 const dialog = ref(false)
@@ -221,7 +307,11 @@ function openAdd(prefill?: { field_id?: number; time?: string }) {
   editing.value = null
   form.value = blankForm()
   if (prefill?.field_id != null) form.value.field_id = prefill.field_id
-  if (prefill?.time) form.value.time = prefill.time
+  if (prefill?.time) {
+    form.value.date = selectedDay.value || form.value.date
+    form.value.time = prefill.time
+    form.value.endTime = addMinutes(prefill.time, defaultDuration())
+  }
   dialog.value = true
 }
 
@@ -312,14 +402,7 @@ function confirmDelete() {
       <q-btn color="primary" icon="add" label="Add match" @click="openAdd()" />
     </div>
 
-    <q-tabs
-      v-if="days.length > 1"
-      v-model="selectedDay"
-      dense
-      no-caps
-      align="left"
-      class="q-mb-sm text-primary"
-    >
+    <q-tabs v-if="days.length > 1" v-model="selectedDay" dense no-caps align="left" class="q-mb-sm text-primary">
       <q-tab v-for="d in days" :key="d" :name="d" :label="d" />
     </q-tabs>
 
@@ -333,7 +416,7 @@ function confirmDelete() {
 
     <!-- Unscheduled strip -->
     <div class="unscheduled" @dragover.prevent @drop="onDropUnscheduled">
-      <div class="text-caption text-grey q-mb-xs">Unscheduled (drag onto the grid, or tap to edit)</div>
+      <div class="text-caption text-grey q-mb-xs">Unscheduled (drag onto the calendar, or tap to edit)</div>
       <div v-if="unscheduled.length" class="card-list">
         <div
           v-for="m in unscheduled"
@@ -356,52 +439,45 @@ function confirmDelete() {
     </div>
 
     <q-banner v-if="!fieldList.length" class="bg-grey-2 q-my-md">
-      Add fields in the <b>Fields</b> section to build the schedule grid.
+      Add fields in the <b>Fields</b> section to build the calendar.
     </q-banner>
 
-    <!-- Grid -->
-    <div v-else class="schedule-scroll">
-      <table class="grid">
-        <thead>
-          <tr>
-            <th class="time-col">Time</th>
-            <th v-for="f in fieldList" :key="f.id">{{ f.name || `#${f.id}` }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="time in times" :key="time">
-            <td class="time-col">{{ time }}</td>
-            <td
-              v-for="f in fieldList"
-              :key="f.id"
-              class="cell"
-              @dragover.prevent
-              @drop="onDropCell(f.id, time)"
-              @dblclick="openAdd({ field_id: f.id, time })"
+    <!-- Calendar -->
+    <div v-else class="cal-scroll">
+      <div class="cal">
+        <div class="cal-row cal-head">
+          <div class="cal-gutter-cell" />
+          <div v-for="f in fieldList" :key="f.id" class="cal-col-head">{{ f.name || `#${f.id}` }}</div>
+        </div>
+        <div class="cal-row cal-body" :style="{ height: totalHeight + 'px' }">
+          <div class="cal-gutter">
+            <div v-for="l in gridLines" :key="l.top" class="cal-time" :style="{ top: l.top + 'px' }">{{ l.label }}</div>
+          </div>
+          <div
+            v-for="f in fieldList"
+            :key="f.id"
+            class="cal-col"
+            @click="onColClick($event, f.id)"
+            @dragover.prevent
+            @drop="onDropCol($event, f.id)"
+          >
+            <div v-for="l in gridLines" :key="l.top" class="cal-line" :style="{ top: l.top + 'px' }" />
+            <div
+              v-for="b in fieldBlocks(f.id)"
+              :key="b.m.id"
+              class="cal-block"
+              draggable="true"
+              :style="blockStyle(b)"
+              @click.stop="openEdit(b.m)"
+              @dragstart="onDragStart(b.m.id)"
+              @dragend="dragId = null"
             >
-              <div
-                v-for="m in cellMatches(f.id, time)"
-                :key="m.id"
-                class="match-card"
-                draggable="true"
-                @dragstart="onDragStart(m.id)"
-          @dragend="dragId = null"
-                @click="openEdit(m)"
-              >
-                <div class="teams">{{ matchTitle(m) }}</div>
-                <div class="meta">
-                  <span v-if="m.label">{{ m.label }}</span>
-                  <span v-if="matchEnd(m)"> · ends {{ matchEnd(m) }}</span>
-                  <span v-if="m.referee_team_id"> · ref {{ teamName(m.referee_team_id) }}</span>
-                  <q-badge v-if="m.status !== 'scheduled'" :color="statusColor(m.status)" class="q-ml-xs">
-                    {{ m.status }}
-                  </q-badge>
-                </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <div class="cb-title">{{ matchTitle(b.m) }}</div>
+              <div class="cb-time">{{ matchRange(b.m) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Add / edit dialog -->
@@ -411,24 +487,24 @@ function confirmDelete() {
         <q-separator />
         <q-card-section class="q-pt-md" style="max-height: 60vh; overflow-y: auto">
           <div class="dialog-form">
-          <q-input v-model="form.label" label="Label (optional)" />
-          <q-select v-model="form.a_team_id" :options="teamOptions" label="Team A" emit-value map-options clearable />
-          <q-select v-model="form.b_team_id" :options="teamOptions" label="Team B" emit-value map-options clearable />
-          <q-select v-model="form.field_id" :options="fieldOptions" label="Field" emit-value map-options clearable />
-          <q-input v-model="form.date" label="Date" type="date" stack-label />
-          <div class="dialog-row">
-            <q-input
-              v-model="form.time"
-              label="Start time"
-              type="time"
-              stack-label
-              @update:model-value="onStartTimeChange"
-            />
-            <q-input v-model="form.endTime" label="End time" type="time" stack-label />
-          </div>
-          <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
-          <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
-          <q-select v-model="form.status" :options="statusOptions" label="Status" />
+            <q-input v-model="form.label" label="Label (optional)" />
+            <q-select v-model="form.a_team_id" :options="teamOptions" label="Team A" emit-value map-options clearable />
+            <q-select v-model="form.b_team_id" :options="teamOptions" label="Team B" emit-value map-options clearable />
+            <q-select v-model="form.field_id" :options="fieldOptions" label="Field" emit-value map-options clearable />
+            <q-input v-model="form.date" label="Date" type="date" stack-label />
+            <div class="dialog-row">
+              <q-input
+                v-model="form.time"
+                label="Start time"
+                type="time"
+                stack-label
+                @update:model-value="onStartTimeChange"
+              />
+              <q-input v-model="form.endTime" label="End time" type="time" stack-label />
+            </div>
+            <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
+            <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
+            <q-select v-model="form.status" :options="statusOptions" label="Status" />
           </div>
         </q-card-section>
         <q-separator />
@@ -444,38 +520,11 @@ function confirmDelete() {
 </template>
 
 <style scoped>
-.schedule-scroll {
-  overflow-x: auto;
-}
-.grid {
-  border-collapse: collapse;
-  min-width: 100%;
-}
-.grid th,
-.grid td {
-  border: 1px solid #ddd;
-  vertical-align: top;
-  padding: 2px;
-}
-.grid th {
-  background: var(--q-primary);
-  color: #fff;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.time-col {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-td.time-col {
-  background: #fafafa;
-}
-.cell {
-  min-width: 140px;
-  height: 44px;
+.unscheduled {
+  border: 1px dashed #bbb;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 12px;
 }
 .card-list {
   display: flex;
@@ -487,30 +536,93 @@ td.time-col {
   border-left: 3px solid var(--q-primary);
   border-radius: 3px;
   padding: 2px 5px;
-  margin: 2px 0;
   cursor: pointer;
   font-size: 12px;
   line-height: 1.3;
 }
-.card-list .match-card {
-  margin: 0;
-}
 .match-card .teams {
   font-weight: 500;
-}
-.match-card .vs {
-  color: #888;
-  font-weight: 400;
 }
 .match-card .meta {
   color: #666;
   font-size: 11px;
 }
-.unscheduled {
-  border: 1px dashed #bbb;
+
+.cal-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 210px);
+  border: 1px solid #e0e0e0;
   border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 12px;
+}
+.cal {
+  min-width: fit-content;
+}
+.cal-row {
+  display: flex;
+}
+.cal-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--q-primary);
+  color: #fff;
+}
+.cal-gutter-cell {
+  flex: 0 0 52px;
+}
+.cal-col-head {
+  flex: 1 0 132px;
+  padding: 6px 8px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+.cal-gutter {
+  flex: 0 0 52px;
+  position: relative;
+}
+.cal-time {
+  position: absolute;
+  right: 5px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #999;
+  font-variant-numeric: tabular-nums;
+}
+.cal-col {
+  flex: 1 0 132px;
+  position: relative;
+  border-left: 1px solid #eee;
+}
+.cal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #f2f2f2;
+  pointer-events: none;
+}
+.cal-block {
+  position: absolute;
+  background: #d7ebf5;
+  border: 1px solid var(--q-primary);
+  border-left: 3px solid var(--q-primary);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.cal-block .cb-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-block .cb-time {
+  color: #557;
+  font-size: 10px;
 }
 .dialog-form {
   display: flex;
@@ -522,6 +634,6 @@ td.time-col {
   gap: 12px;
 }
 .dialog-row > * {
-  flex: 1 1 140px;
+  flex: 1 1 130px;
 }
 </style>
