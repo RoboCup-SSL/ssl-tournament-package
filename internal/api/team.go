@@ -32,7 +32,9 @@ func applyTeamPatch(team *store.Team, patch TeamPatch) *Error {
 	if applyError := applyValue(patch.Notes, &team.Notes, "notes"); applyError != nil {
 		return applyError
 	}
-	applyNullable(patch.WithdrawnAt, &team.WithdrawnAt)
+	if e := applyNullableString(patch.WithdrawnAt, &team.WithdrawnAt, "withdrawn_at", validNaiveTime); e != nil {
+		return e
+	}
 	return nil
 }
 
