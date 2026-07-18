@@ -34,7 +34,9 @@ func applyGroupPatch(group *store.TeamGroup, patch GroupPatch) *Error {
 	if applyError := applyValue(patch.Notes, &group.Notes, "notes"); applyError != nil {
 		return applyError
 	}
-	applyNullable(patch.RankingConfirmedAt, &group.RankingConfirmedAt)
+	if e := applyNullableString(patch.RankingConfirmedAt, &group.RankingConfirmedAt, "ranking_confirmed_at", validNaiveTime); e != nil {
+		return e
+	}
 	return nil
 }
 

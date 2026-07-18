@@ -28,8 +28,12 @@ func applyBookingPatch(booking *store.FieldBooking, patch BookingPatch) *Error {
 	if applyError := applyValue(patch.Label, &booking.Label, "label"); applyError != nil {
 		return applyError
 	}
-	applyNullable(patch.StartsAt, &booking.StartsAt)
-	applyNullable(patch.EndsAt, &booking.EndsAt)
+	if e := applyNullableString(patch.StartsAt, &booking.StartsAt, "starts_at", validNaiveTime); e != nil {
+		return e
+	}
+	if e := applyNullableString(patch.EndsAt, &booking.EndsAt, "ends_at", validNaiveTime); e != nil {
+		return e
+	}
 	return applyValue(patch.Notes, &booking.Notes, "notes")
 }
 

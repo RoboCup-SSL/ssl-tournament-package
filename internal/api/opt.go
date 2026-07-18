@@ -48,6 +48,26 @@ func applyNullable[T any](field Opt[T], target **T) {
 	*target = &value
 }
 
+// applyNullableString applies a nullable text field: absent leaves it, null or
+// "" clears it, and a non-empty value is validated by check (which returns the
+// canonical form). Malformed input yields an INVALID_VALUE error on name.
+func applyNullableString(field Opt[string], target **string, name string,
+	check func(string) (string, bool)) *Error {
+	if !field.Set {
+		return nil
+	}
+	if field.Null || field.Value == "" {
+		*target = nil
+		return nil
+	}
+	canonical, ok := check(field.Value)
+	if !ok {
+		return &Error{Code: CodeInvalidValue, Field: name, Message: "invalid " + name}
+	}
+	*target = &canonical
+	return nil
+}
+
 // listValue converts a list patch field into the store's replace pointer:
 // nil means untouched, empty means clear.
 func listValue[T any](field Opt[[]T]) *[]T {

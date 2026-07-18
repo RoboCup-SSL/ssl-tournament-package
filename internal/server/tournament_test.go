@@ -46,6 +46,21 @@ func TestTournamentCRUD(t *testing.T) {
 		t.Fatalf("list: %d %s", status, body)
 	}
 
+	status, body = doRequest(t, testServer, "PATCH", "/api/tournaments/1", `{"starts_on": "banana"}`)
+	if status != http.StatusBadRequest {
+		t.Fatalf("bad starts_on: %d %s", status, body)
+	}
+	envelope := asObject(t, body)
+	errorObject := envelope["error"].(map[string]any)
+	if errorObject["field"] != "starts_on" {
+		t.Fatalf("bad starts_on field: %v", errorObject)
+	}
+
+	status, body = doRequest(t, testServer, "PATCH", "/api/tournaments/1", `{"time_zone": "Asia/Seoul"}`)
+	if status != http.StatusOK {
+		t.Fatalf("good time_zone: %d %s", status, body)
+	}
+
 	status, _ = doRequest(t, testServer, "DELETE", "/api/tournaments/1", "")
 	if status != http.StatusNoContent {
 		t.Fatalf("delete: %d", status)
