@@ -127,6 +127,15 @@ function teamName(id: number | null): string {
   return teams.items.find((t) => t.id === id)?.name || `#${id}`
 }
 
+// A card's title: the matchup if either team is set, else the label or #id so a
+// teamless match is still identifiable.
+function matchTitle(m: Match): string {
+  if (m.a_team_id != null || m.b_team_id != null) {
+    return `${teamName(m.a_team_id)} vs ${teamName(m.b_team_id)}`
+  }
+  return m.label || `Match #${m.id}`
+}
+
 function statusColor(status: string): string {
   if (status === 'finished') return 'positive'
   if (status === 'playing') return 'orange'
@@ -335,7 +344,12 @@ function confirmDelete() {
           @dragend="dragId = null"
           @click="openEdit(m)"
         >
-          <div class="teams">{{ teamName(m.a_team_id) }} <span class="vs">vs</span> {{ teamName(m.b_team_id) }}</div>
+          <div class="teams">{{ matchTitle(m) }}</div>
+          <div class="meta">
+            <span v-if="m.scheduled_at">{{ m.scheduled_at.slice(0, 10) }} {{ m.scheduled_at.slice(11, 16) }}</span>
+            <span v-else>no time</span>
+            <span v-if="!m.field_id"> · no field</span>
+          </div>
         </div>
       </div>
       <div v-else class="text-caption text-grey">none</div>
@@ -374,7 +388,7 @@ function confirmDelete() {
           @dragend="dragId = null"
                 @click="openEdit(m)"
               >
-                <div class="teams">{{ teamName(m.a_team_id) }} <span class="vs">vs</span> {{ teamName(m.b_team_id) }}</div>
+                <div class="teams">{{ matchTitle(m) }}</div>
                 <div class="meta">
                   <span v-if="m.label">{{ m.label }}</span>
                   <span v-if="matchEnd(m)"> · ends {{ matchEnd(m) }}</span>
