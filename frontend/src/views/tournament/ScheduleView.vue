@@ -189,14 +189,17 @@ function fieldBlocks(fieldId: number): Block[] {
   return blocks
 }
 
-function blockStyle(b: Block) {
+function blockStyle(b: Block): Record<string, string> {
   const widthPct = 100 / b.lanes
-  return {
+  const style: Record<string, string> = {
     top: `${b.top}px`,
     height: `${Math.max(b.height, 18)}px`,
     left: `calc(${b.lane * widthPct}% + 1px)`,
     width: `calc(${widthPct}% - 3px)`,
   }
+  const accent = statusCss(b.m.status)
+  if (accent) style.borderLeftColor = accent
+  return style
 }
 
 function teamName(id: number | null): string {
@@ -209,14 +212,17 @@ function matchTitle(m: Match): string {
   }
   return m.label || `Match #${m.id}`
 }
-function matchEnd(m: Match): string {
-  if (!m.scheduled_at || !m.duration_minutes) return ''
-  return addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes)
-}
 function matchRange(m: Match): string {
   if (!m.scheduled_at) return ''
   const s = m.scheduled_at.slice(11, 16)
   return `${s}–${addMinutes(s, m.duration_minutes || defaultDuration())}`
+}
+// A CSS accent color per status (blank = scheduled, uses the default block color).
+function statusCss(status: string): string {
+  if (status === 'finished') return '#21BA45'
+  if (status === 'playing') return '#F2A007'
+  if (status === 'cancelled' || status === 'invalidated') return '#9e9e9e'
+  return ''
 }
 
 // map a pointer Y within a column to a snapped time string
@@ -224,7 +230,9 @@ function timeAtY(el: HTMLElement, clientY: number): string {
   const y = clientY - el.getBoundingClientRect().top
   const raw = dayBounds.value.start + y / PX_PER_MIN
   const snapped = Math.round(raw / interval.value) * interval.value
-  return fmtHM(Math.max(dayBounds.value.start, Math.min(snapped, dayBounds.value.end)))
+  // A start time must stay a valid HH:MM (< 24:00); cap below midnight.
+  const maxStart = Math.min(dayBounds.value.end, 24 * 60 - interval.value)
+  return fmtHM(Math.max(dayBounds.value.start, Math.min(snapped, maxStart)))
 }
 
 function onColClick(event: MouseEvent, fieldId: number) {
@@ -478,7 +486,9 @@ function confirmDelete() {
               @dragend="dragId = null"
             >
               <div class="cb-title">{{ matchTitle(b.m) }}</div>
-              <div class="cb-time">{{ matchRange(b.m) }}</div>
+              <div class="cb-time">
+                {{ matchRange(b.m) }}<span v-if="b.m.status !== 'scheduled'"> · {{ b.m.status }}</span>
+              </div>
             </div>
           </div>
         </div>
