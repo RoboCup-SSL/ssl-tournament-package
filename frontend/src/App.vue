@@ -19,8 +19,8 @@ const workspaceId = computed(() =>
 
 const sections = [
   { name: 'settings', label: 'Settings', icon: 'settings', enabled: true },
-  { name: 'fields', label: 'Fields', icon: 'stadium', enabled: false },
-  { name: 'teams', label: 'Teams', icon: 'groups', enabled: false },
+  { name: 'fields', label: 'Fields', icon: 'stadium', enabled: true },
+  { name: 'teams', label: 'Teams', icon: 'groups', enabled: true },
   { name: 'divisions', label: 'Divisions', icon: 'account_tree', enabled: false },
   { name: 'groups', label: 'Groups', icon: 'grid_view', enabled: false },
   { name: 'matches', label: 'Matches', icon: 'sports_soccer', enabled: false },

@@ -31,3 +31,35 @@ export interface TournamentInput {
   default_gap_minutes?: number | null
   time_zone?: string | null
 }
+
+export interface Field {
+  id: number
+  tournament_id: number
+  name: string
+}
+
+export interface FieldInput {
+  name?: string
+}
+
+export interface Team {
+  id: number
+  tournament_id: number
+  division_id: number | null
+  name: string
+  country: string
+  contact: string
+  notes: string
+  withdrawn_at: string | null
+  created_at: string
+}
+
+// Writable team fields; the M2d form uses name/country/contact/notes.
+export interface TeamInput {
+  name?: string
+  country?: string
+  contact?: string
+  notes?: string
+  division_id?: number | null
+  withdrawn_at?: string | null
+}

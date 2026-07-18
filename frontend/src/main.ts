@@ -1,7 +1,7 @@
 // App bootstrap: router + Pinia + Quasar. No control/WS plugin (JSON only).
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { Quasar } from 'quasar'
+import { Quasar, Dialog, Notify } from 'quasar'
 import router from './router'
 import App from './App.vue'
 
@@ -12,5 +12,5 @@ import '@/assets/main.scss'
 createApp(App)
   .use(router)
   .use(createPinia())
-  .use(Quasar, {})
+  .use(Quasar, { plugins: { Dialog, Notify } })
   .mount('#app')
