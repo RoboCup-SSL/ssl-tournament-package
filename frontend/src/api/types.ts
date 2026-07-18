@@ -63,3 +63,40 @@ export interface TeamInput {
   division_id?: number | null
   withdrawn_at?: string | null
 }
+
+export const MATCH_STATUSES = [
+  'scheduled', 'playing', 'suspended', 'finished', 'forfeited', 'cancelled', 'invalidated',
+] as const
+
+export interface Match {
+  id: number
+  tournament_id: number
+  division_id: number | null
+  group_id: number | null
+  label: string
+  field_id: number | null
+  scheduled_at: string | null
+  duration_minutes: number | null
+  status: string
+  referee_team_id: number | null
+  assistant_referee_team_id: number | null
+  a_team_id: number | null
+  a_score: number | null
+  b_team_id: number | null
+  b_score: number | null
+  winner_team_id: number | null
+  notes: string
+  created_at: string
+}
+
+// Writable match fields the schedule edits (results/bracket-wiring excluded).
+export interface MatchInput {
+  label?: string
+  field_id?: number | null
+  scheduled_at?: string | null
+  status?: string
+  referee_team_id?: number | null
+  assistant_referee_team_id?: number | null
+  a_team_id?: number | null
+  b_team_id?: number | null
+}

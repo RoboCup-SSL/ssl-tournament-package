@@ -23,7 +23,7 @@ const sections = [
   { name: 'teams', label: 'Teams', icon: 'groups', enabled: true },
   { name: 'divisions', label: 'Divisions', icon: 'account_tree', enabled: false },
   { name: 'groups', label: 'Groups', icon: 'grid_view', enabled: false },
-  { name: 'matches', label: 'Matches', icon: 'sports_soccer', enabled: false },
+  { name: 'matches', label: 'Schedule', icon: 'calendar_month', enabled: true },
   { name: 'standings', label: 'Standings', icon: 'leaderboard', enabled: false },
   { name: 'placements', label: 'Placements', icon: 'emoji_events', enabled: false },
 ]
