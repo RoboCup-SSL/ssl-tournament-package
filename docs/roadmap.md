@@ -68,8 +68,15 @@ Standings/Bracket, Placements) — drawer on desktop, menu on mobile.
 - **M2b** — frontend shell (thin vertical slice): toolchain + JSON client + Pinia + hash router +
   embed pipeline + one read-only HomeView (tournament list). See
   docs/superpowers/specs/2026-07-17-m2b-frontend-shell-design.md.
+- **M2b·dt (data-layer)** — date/time format validation + tournament timezone: server-side
+  validation for every date/time field (reject malformed shape, normalize to canonical form;
+  values stay freeform), plus a single `time_zone` (IANA) anchor on the tournament. Backend stays
+  timezone-naive (instants stored bare, no offset; all relative to each other); the frontend
+  applies the zone for display only. Precursor to M2c. See
+  docs/superpowers/specs/2026-07-18-datetime-validation-timezone-design.md.
 - **M2c** — workspace shell + Settings (where/when) section: dates, venue hours, default
-  match/gap minutes (the scheduling inputs). Thinnest section slice; proves the section pattern.
+  match/gap minutes (the scheduling inputs) + the `time_zone` picker; stashes the zone in Pinia.
+  Depends on M2b·dt. Thinnest section slice; proves the section pattern.
 - **M2d** — Fields + Teams sections: the entities a match references.
 - **M2e — Schedule view (the MVP):** matches on a field × time grid; create/move/edit freely,
   assign ref/assistant teams (`referee_team_id`/`assistant_referee_team_id` already in the model).
