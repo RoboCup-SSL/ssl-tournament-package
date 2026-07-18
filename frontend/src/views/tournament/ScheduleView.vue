@@ -88,12 +88,9 @@ watch(
 
 // --- calendar geometry ---
 const PX_PER_MIN = 1
-const interval = ref(30)
-const intervalOptions = [
-  { label: '15m', value: 15 },
-  { label: '30m', value: 30 },
-  { label: '60m', value: 60 },
-]
+// Gridlines/labels are hourly; drag + click-to-add snap to a finer resolution.
+const GRID_MINUTES = 60
+const SNAP_MINUTES = 15
 
 function onDay(m: Match): boolean {
   return !!m.scheduled_at && m.scheduled_at.slice(0, 10) === selectedDay.value
@@ -123,7 +120,7 @@ const totalHeight = computed(() => (dayBounds.value.end - dayBounds.value.start)
 const gridLines = computed(() => {
   const { start, end } = dayBounds.value
   const lines: { top: number; label: string }[] = []
-  for (let m = start; m <= end; m += interval.value) {
+  for (let m = start; m <= end; m += GRID_MINUTES) {
     lines.push({ top: (m - start) * PX_PER_MIN, label: fmtHM(m) })
   }
   return lines
@@ -229,9 +226,9 @@ function statusCss(status: string): string {
 function timeAtY(el: HTMLElement, clientY: number): string {
   const y = clientY - el.getBoundingClientRect().top
   const raw = dayBounds.value.start + y / PX_PER_MIN
-  const snapped = Math.round(raw / interval.value) * interval.value
+  const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES
   // A start time must stay a valid HH:MM (< 24:00); cap below midnight.
-  const maxStart = Math.min(dayBounds.value.end, 24 * 60 - interval.value)
+  const maxStart = Math.min(dayBounds.value.end, 24 * 60 - SNAP_MINUTES)
   return fmtHM(Math.max(dayBounds.value.start, Math.min(snapped, maxStart)))
 }
 
@@ -456,17 +453,6 @@ onBeforeUnmount(() => {
     <div class="row items-center q-mb-md">
       <div class="text-h6">Schedule</div>
       <q-space />
-      <q-btn-toggle
-        v-model="interval"
-        :options="intervalOptions"
-        dense
-        unelevated
-        no-caps
-        toggle-color="primary"
-        text-color="primary"
-        color="grey-3"
-        class="q-mr-sm"
-      />
       <q-btn color="primary" icon="add" label="Add match" @click="openAdd()" />
     </div>
 
