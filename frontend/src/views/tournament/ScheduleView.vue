@@ -172,7 +172,9 @@ function blankForm(): Form {
     a_team_id: null,
     b_team_id: null,
     field_id: null,
-    date: selectedDay.value,
+    // Default a new match to the event's start date (or, in a multi-day event,
+    // the day currently in view) — not today.
+    date: tournament.current?.starts_on || selectedDay.value || '',
     time: '',
     referee_team_id: null,
     assistant_referee_team_id: null,
@@ -283,6 +285,12 @@ function confirmDelete() {
     >
       <q-tab v-for="d in days" :key="d" :name="d" :label="d" />
     </q-tabs>
+
+    <q-banner v-if="tournament.current && !tournament.current.starts_on" dense class="bg-amber-1 text-amber-9 q-mb-sm">
+      <template #avatar><q-icon name="info" color="amber-8" /></template>
+      No start date set, so the schedule defaults to today. Set it in
+      <router-link :to="{ name: 'settings', params: { id: route.params.id } }" class="text-amber-9">Settings</router-link>.
+    </q-banner>
 
     <q-banner v-if="matches.error" class="bg-negative text-white q-mb-md">{{ matches.error }}</q-banner>
 
