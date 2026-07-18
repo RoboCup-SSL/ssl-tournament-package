@@ -1,8 +1,12 @@
 <script setup lang="ts">
 // A 24-hour time field. Mobile keeps the native OS picker (a good clock);
 // desktop uses a clean q-time clock popup instead of Chromium's 3-column,
-// AM/PM, infinite-scroll control. Model is a naive "HH:MM" string. On desktop
-// the popup auto-closes once the minute is chosen (hour = 1st pick, minute = 2nd).
+// AM/PM, infinite-scroll control. Model is a naive "HH:MM" string.
+//
+// The desktop popup auto-closes after the minute is chosen. We count *clicks on
+// the clock face* (1st = hour, 2nd = minute), not value-change emits — q-time
+// only emits when the value changes, so re-picking the same hour/minute would
+// never advance an emit-based counter.
 import { ref } from 'vue'
 import { useQuasar } from 'quasar'
 import type { QPopupProxy } from 'quasar'
@@ -12,15 +16,15 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
 const $q = useQuasar()
 
 const proxy = ref<QPopupProxy>()
-const picks = ref(0)
+const clockClicks = ref(0)
 
 function set(value: string | number | null) {
   emit('update:modelValue', value == null ? '' : String(value))
 }
-function onPick(value: string | number | null) {
-  set(value)
-  picks.value += 1
-  if (picks.value >= 2) proxy.value?.hide()
+function onClockClick(event: MouseEvent) {
+  if (!(event.target as HTMLElement).closest('[class*="q-time__clock"]')) return
+  clockClicks.value += 1
+  if (clockClicks.value >= 2) proxy.value?.hide()
 }
 </script>
 
@@ -51,13 +55,15 @@ function onPick(value: string | number | null) {
           cover
           transition-show="scale"
           transition-hide="scale"
-          @before-show="picks = 0"
+          @before-show="clockClicks = 0"
         >
-          <q-time :model-value="modelValue" format24h @update:model-value="onPick">
-            <div class="row items-center justify-end">
-              <q-btn v-close-popup label="Close" color="primary" flat />
-            </div>
-          </q-time>
+          <div @click="onClockClick">
+            <q-time :model-value="modelValue" format24h @update:model-value="set">
+              <div class="row items-center justify-end">
+                <q-btn v-close-popup label="Close" color="primary" flat />
+              </div>
+            </q-time>
+          </div>
         </q-popup-proxy>
       </q-icon>
     </template>
