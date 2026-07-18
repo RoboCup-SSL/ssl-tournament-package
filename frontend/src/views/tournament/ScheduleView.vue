@@ -40,6 +40,18 @@ function fmtHM(mins: number): string {
   const m = mins % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
+function addMinutes(hm: string, mins: number): string {
+  return fmtHM(Math.max(0, Math.min(parseHM(hm) + mins, 24 * 60 - 1)))
+}
+// The tournament's per-match duration (frontend default for a new match's end).
+function defaultDuration(): number {
+  return tournament.current?.default_match_minutes || 60
+}
+// The end time of a scheduled match with a duration, for display on its card.
+function matchEnd(m: Match): string {
+  if (!m.scheduled_at || !m.duration_minutes) return ''
+  return addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes)
+}
 function todayISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -161,9 +173,17 @@ interface Form {
   field_id: number | null
   date: string
   time: string
+  endTime: string
   referee_team_id: number | null
   assistant_referee_team_id: number | null
   status: string
+}
+
+// When the user sets the start and no end is set yet, fill end = start + the
+// tournament's match duration. They can then override it for any length.
+function onStartTimeChange(value: string | number | null) {
+  const start = typeof value === 'string' ? value : ''
+  if (start && !form.value.endTime) form.value.endTime = addMinutes(start, defaultDuration())
 }
 
 function blankForm(): Form {
@@ -176,6 +196,7 @@ function blankForm(): Form {
     // the day currently in view) — not today.
     date: tournament.current?.starts_on || selectedDay.value || '',
     time: '',
+    endTime: '',
     referee_team_id: null,
     assistant_referee_team_id: null,
     status: 'scheduled',
@@ -204,6 +225,7 @@ function openEdit(m: Match) {
     field_id: m.field_id,
     date: m.scheduled_at ? m.scheduled_at.slice(0, 10) : '',
     time: m.scheduled_at ? m.scheduled_at.slice(11, 16) : '',
+    endTime: m.scheduled_at && m.duration_minutes ? addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes) : '',
     referee_team_id: m.referee_team_id,
     assistant_referee_team_id: m.assistant_referee_team_id,
     status: m.status,
@@ -212,12 +234,18 @@ function openEdit(m: Match) {
 }
 
 function buildInput(f: Form): MatchInput {
+  let duration: number | null = null
+  if (f.time && f.endTime) {
+    const diff = parseHM(f.endTime) - parseHM(f.time)
+    duration = diff > 0 ? diff : null
+  }
   return {
     label: f.label,
     a_team_id: f.a_team_id,
     b_team_id: f.b_team_id,
     field_id: f.field_id,
     scheduled_at: f.date && f.time ? `${f.date}T${f.time}` : null,
+    duration_minutes: duration,
     referee_team_id: f.referee_team_id,
     assistant_referee_team_id: f.assistant_referee_team_id,
     status: f.status,
@@ -349,6 +377,7 @@ function confirmDelete() {
                 <div class="teams">{{ teamName(m.a_team_id) }} <span class="vs">vs</span> {{ teamName(m.b_team_id) }}</div>
                 <div class="meta">
                   <span v-if="m.label">{{ m.label }}</span>
+                  <span v-if="matchEnd(m)"> · ends {{ matchEnd(m) }}</span>
                   <span v-if="m.referee_team_id"> · ref {{ teamName(m.referee_team_id) }}</span>
                   <q-badge v-if="m.status !== 'scheduled'" :color="statusColor(m.status)" class="q-ml-xs">
                     {{ m.status }}
@@ -372,9 +401,16 @@ function confirmDelete() {
           <q-select v-model="form.a_team_id" :options="teamOptions" label="Team A" emit-value map-options clearable />
           <q-select v-model="form.b_team_id" :options="teamOptions" label="Team B" emit-value map-options clearable />
           <q-select v-model="form.field_id" :options="fieldOptions" label="Field" emit-value map-options clearable />
+          <q-input v-model="form.date" label="Date" type="date" stack-label />
           <div class="dialog-row">
-            <q-input v-model="form.date" label="Date" type="date" stack-label />
-            <q-input v-model="form.time" label="Time" type="time" stack-label />
+            <q-input
+              v-model="form.time"
+              label="Start time"
+              type="time"
+              stack-label
+              @update:model-value="onStartTimeChange"
+            />
+            <q-input v-model="form.endTime" label="End time" type="time" stack-label />
           </div>
           <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
           <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />

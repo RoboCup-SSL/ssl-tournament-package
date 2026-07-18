@@ -94,6 +94,7 @@ export interface MatchInput {
   label?: string
   field_id?: number | null
   scheduled_at?: string | null
+  duration_minutes?: number | null
   status?: string
   referee_team_id?: number | null
   assistant_referee_team_id?: number | null
