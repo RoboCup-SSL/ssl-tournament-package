@@ -11,6 +11,7 @@ import { useFieldsStore } from '@/store/fields'
 import { useTeamsStore } from '@/store/teams'
 import { useTournamentStore } from '@/store/tournament'
 import type { Match, MatchInput } from '@/api/types'
+import TimeField from '@/components/TimeField.vue'
 
 const route = useRoute()
 const $q = useQuasar()
@@ -558,14 +559,8 @@ onBeforeUnmount(() => {
             <q-select v-model="form.field_id" :options="fieldOptions" label="Field" emit-value map-options clearable />
             <q-input v-model="form.date" label="Date" type="date" stack-label />
             <div class="dialog-row">
-              <q-input
-                v-model="form.time"
-                label="Start time"
-                type="time"
-                stack-label
-                @update:model-value="onStartTimeChange"
-              />
-              <q-input v-model="form.endTime" label="End time" type="time" stack-label />
+              <TimeField v-model="form.time" label="Start time" @update:model-value="onStartTimeChange" />
+              <TimeField v-model="form.endTime" label="End time" />
             </div>
             <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
             <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
