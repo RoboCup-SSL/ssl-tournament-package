@@ -233,14 +233,19 @@ function onColClick(event: MouseEvent, fieldId: number) {
 
 // --- drag to move ---
 const dragId = ref<number | null>(null)
-function onDragStart(id: number) {
+// Distance from the grabbed block's top to the cursor, so the drop positions
+// the block's top (not the cursor) at the target time.
+const dragOffsetY = ref(0)
+function onDragStart(id: number, event: DragEvent) {
   dragId.value = id
+  const el = event.currentTarget as HTMLElement | null
+  dragOffsetY.value = el ? event.clientY - el.getBoundingClientRect().top : 0
 }
 async function onDropCol(event: DragEvent, fieldId: number) {
   const id = dragId.value
   dragId.value = null
   if (id == null) return
-  const at = `${selectedDay.value}T${timeAtY(event.currentTarget as HTMLElement, event.clientY)}`
+  const at = `${selectedDay.value}T${timeAtY(event.currentTarget as HTMLElement, event.clientY - dragOffsetY.value)}`
   const dragged = matches.items.find((m) => m.id === id)
   if (dragged && dragged.field_id === fieldId && dragged.scheduled_at === at) return
   await matches.update(id, { field_id: fieldId, scheduled_at: at })
@@ -423,7 +428,7 @@ function confirmDelete() {
           :key="m.id"
           class="match-card"
           draggable="true"
-          @dragstart="onDragStart(m.id)"
+          @dragstart="onDragStart(m.id, $event)"
           @dragend="dragId = null"
           @click="openEdit(m)"
         >
@@ -469,7 +474,7 @@ function confirmDelete() {
               draggable="true"
               :style="blockStyle(b)"
               @click.stop="openEdit(b.m)"
-              @dragstart="onDragStart(b.m.id)"
+              @dragstart="onDragStart(b.m.id, $event)"
               @dragend="dragId = null"
             >
               <div class="cb-title">{{ matchTitle(b.m) }}</div>
