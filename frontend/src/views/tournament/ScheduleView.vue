@@ -79,18 +79,21 @@ watch(
 )
 
 // --- time rows for the selected day ---
-const slotMinutes = computed(() => {
-  const t = tournament.current
-  const step = (t?.default_match_minutes ?? 0) + (t?.default_gap_minutes ?? 0)
-  return step > 0 ? step : 60
-})
+// Grid row granularity in minutes — a display/placement choice, independent of
+// how long a match lasts. The user picks it; defaults to 30.
+const interval = ref(30)
+const intervalOptions = [
+  { label: '15m', value: 15 },
+  { label: '30m', value: 30 },
+  { label: '60m', value: 60 },
+]
 
 const times = computed<string[]>(() => {
   const set = new Set<string>()
   const t = tournament.current
   const open = parseHM(t?.venue_opens || '08:00')
   const close = parseHM(t?.venue_closes || '20:00')
-  for (let mins = open; mins <= close && set.size < 200; mins += slotMinutes.value) set.add(fmtHM(mins))
+  for (let mins = open; mins <= close && set.size < 200; mins += interval.value) set.add(fmtHM(mins))
   for (const m of matches.items) {
     if (m.scheduled_at && m.scheduled_at.slice(0, 10) === selectedDay.value) {
       set.add(m.scheduled_at.slice(11, 16))
@@ -256,6 +259,17 @@ function confirmDelete() {
     <div class="row items-center q-mb-md">
       <div class="text-h6">Schedule</div>
       <q-space />
+      <q-btn-toggle
+        v-model="interval"
+        :options="intervalOptions"
+        dense
+        unelevated
+        no-caps
+        toggle-color="primary"
+        text-color="primary"
+        color="grey-3"
+        class="q-mr-sm"
+      />
       <q-btn color="primary" icon="add" label="Add match" @click="openAdd()" />
     </div>
 
