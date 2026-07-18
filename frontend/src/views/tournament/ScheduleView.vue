@@ -363,9 +363,11 @@ function confirmDelete() {
 
     <!-- Add / edit dialog -->
     <q-dialog v-model="dialog">
-      <q-card style="min-width: 340px; max-width: 95vw">
+      <q-card class="column" style="min-width: 340px; max-width: 95vw; max-height: 90vh">
         <q-card-section class="text-h6">{{ editing ? 'Edit match' : 'New match' }}</q-card-section>
-        <q-card-section class="dialog-form q-pt-none">
+        <q-separator />
+        <q-card-section class="col scroll q-pt-md">
+          <div class="dialog-form">
           <q-input v-model="form.label" label="Label (optional)" />
           <q-select v-model="form.a_team_id" :options="teamOptions" label="Team A" emit-value map-options clearable />
           <q-select v-model="form.b_team_id" :options="teamOptions" label="Team B" emit-value map-options clearable />
@@ -377,7 +379,9 @@ function confirmDelete() {
           <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
           <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
           <q-select v-model="form.status" :options="statusOptions" label="Status" />
+          </div>
         </q-card-section>
+        <q-separator />
         <q-card-actions align="right">
           <q-btn v-if="editing" flat color="negative" label="Delete" @click="confirmDelete" />
           <q-space />

@@ -103,14 +103,18 @@ function confirmDelete(team: Team) {
     <div v-else class="text-grey">No teams yet.</div>
 
     <q-dialog v-model="dialog">
-      <q-card style="min-width: 340px">
+      <q-card class="column" style="min-width: 340px; max-width: 95vw; max-height: 90vh">
         <q-card-section class="text-h6">{{ editing ? 'Edit team' : 'New team' }}</q-card-section>
-        <q-card-section class="q-pt-none column q-gutter-sm">
-          <q-input v-model="form.name" label="Name" autofocus />
-          <q-input v-model="form.country" label="Country" />
-          <q-input v-model="form.contact" label="Contact" />
-          <q-input v-model="form.notes" label="Notes" type="textarea" autogrow />
+        <q-separator />
+        <q-card-section class="col scroll q-pt-md">
+          <div class="dialog-form">
+            <q-input v-model="form.name" label="Name" autofocus />
+            <q-input v-model="form.country" label="Country" />
+            <q-input v-model="form.contact" label="Contact" />
+            <q-input v-model="form.notes" label="Notes" type="textarea" autogrow />
+          </div>
         </q-card-section>
+        <q-separator />
         <q-card-actions align="right">
           <q-btn v-close-popup flat label="Cancel" />
           <q-btn color="primary" :label="editing ? 'Save' : 'Create'" :loading="busy" @click="submit" />
@@ -119,3 +123,11 @@ function confirmDelete(team: Team) {
     </q-dialog>
   </q-page>
 </template>
+
+<style scoped>
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+</style>
