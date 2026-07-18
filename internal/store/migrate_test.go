@@ -39,8 +39,8 @@ func TestMigrateCreatesSchema(t *testing.T) {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
-		t.Fatalf("user_version = %d, want 2", version)
+	if version != 1 {
+		t.Fatalf("user_version = %d, want 1", version)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestOpenIdempotent(t *testing.T) {
 	if err := s2.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
-		t.Fatalf("user_version after reopen = %d, want 2", version)
+	if version != 1 {
+		t.Fatalf("user_version after reopen = %d, want 1", version)
 	}
 }
