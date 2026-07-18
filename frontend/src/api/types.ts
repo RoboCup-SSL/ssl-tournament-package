@@ -100,4 +100,7 @@ export interface MatchInput {
   assistant_referee_team_id?: number | null
   a_team_id?: number | null
   b_team_id?: number | null
+  a_score?: number | null
+  b_score?: number | null
+  winner_team_id?: number | null
 }

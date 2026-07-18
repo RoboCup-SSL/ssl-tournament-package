@@ -11,7 +11,6 @@ import { useFieldsStore } from '@/store/fields'
 import { useTeamsStore } from '@/store/teams'
 import { useTournamentStore } from '@/store/tournament'
 import type { Match, MatchInput } from '@/api/types'
-import { MATCH_STATUSES } from '@/api/types'
 
 const route = useRoute()
 const $q = useQuasar()
@@ -274,7 +273,6 @@ function notify(ok: string) {
 // --- add / edit dialog ---
 const teamOptions = computed(() => teams.items.map((t) => ({ label: t.name || `#${t.id}`, value: t.id })))
 const fieldOptions = computed(() => fields.items.map((f) => ({ label: f.name || `#${f.id}`, value: f.id })))
-const statusOptions = [...MATCH_STATUSES]
 
 interface Form {
   label: string
@@ -286,8 +284,18 @@ interface Form {
   endTime: string
   referee_team_id: number | null
   assistant_referee_team_id: number | null
-  status: string
+  a_score: string
+  b_score: string
+  winner_team_id: number | null
 }
+
+// Winner options are the two participating teams (freeform winners: use /admin/).
+const winnerOptions = computed(() => {
+  const opts: { label: string; value: number }[] = []
+  if (form.value.a_team_id != null) opts.push({ label: teamName(form.value.a_team_id), value: form.value.a_team_id })
+  if (form.value.b_team_id != null) opts.push({ label: teamName(form.value.b_team_id), value: form.value.b_team_id })
+  return opts
+})
 
 function blankForm(): Form {
   return {
@@ -300,7 +308,9 @@ function blankForm(): Form {
     endTime: '',
     referee_team_id: null,
     assistant_referee_team_id: null,
-    status: 'scheduled',
+    a_score: '',
+    b_score: '',
+    winner_team_id: null,
   }
 }
 
@@ -340,7 +350,9 @@ function openEdit(m: Match) {
     endTime: m.scheduled_at && m.duration_minutes ? addMinutes(m.scheduled_at.slice(11, 16), m.duration_minutes) : '',
     referee_team_id: m.referee_team_id,
     assistant_referee_team_id: m.assistant_referee_team_id,
-    status: m.status,
+    a_score: m.a_score?.toString() ?? '',
+    b_score: m.b_score?.toString() ?? '',
+    winner_team_id: m.winner_team_id,
   }
   dialog.value = true
 }
@@ -360,8 +372,17 @@ function buildInput(f: Form): MatchInput {
     duration_minutes: duration,
     referee_team_id: f.referee_team_id,
     assistant_referee_team_id: f.assistant_referee_team_id,
-    status: f.status,
+    a_score: numOrNull(f.a_score),
+    b_score: numOrNull(f.b_score),
+    winner_team_id: f.winner_team_id,
   }
+}
+
+function numOrNull(s: string): number | null {
+  const t = s.trim()
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isNaN(n) ? null : n
 }
 
 async function submit() {
@@ -511,10 +532,13 @@ onBeforeUnmount(() => {
               @dragstart="onDragStart(b.m.id, $event)"
               @dragend="dragId = null"
             >
-              <div class="cb-title">{{ matchTitle(b.m) }}</div>
-              <div class="cb-time">
-                {{ matchRange(b.m) }}<span v-if="b.m.status !== 'scheduled'"> · {{ b.m.status }}</span>
+              <div class="cb-title">
+                {{ matchTitle(b.m) }}
+                <span v-if="b.m.a_score != null || b.m.b_score != null" class="cb-score">
+                  {{ b.m.a_score ?? '–' }}:{{ b.m.b_score ?? '–' }}
+                </span>
               </div>
+              <div class="cb-time">{{ matchRange(b.m) }}</div>
             </div>
           </div>
         </div>
@@ -545,7 +569,13 @@ onBeforeUnmount(() => {
             </div>
             <q-select v-model="form.referee_team_id" :options="teamOptions" label="Referee team" emit-value map-options clearable />
             <q-select v-model="form.assistant_referee_team_id" :options="teamOptions" label="Assistant referee" emit-value map-options clearable />
-            <q-select v-model="form.status" :options="statusOptions" label="Status" />
+            <q-separator class="q-my-xs" />
+            <div class="text-caption text-grey">Result</div>
+            <div class="dialog-row">
+              <q-input v-model="form.a_score" :label="'Score ' + teamName(form.a_team_id)" type="number" />
+              <q-input v-model="form.b_score" :label="'Score ' + teamName(form.b_team_id)" type="number" />
+            </div>
+            <q-select v-model="form.winner_team_id" :options="winnerOptions" label="Winner" emit-value map-options clearable />
           </div>
         </q-card-section>
         <q-separator />
@@ -664,6 +694,10 @@ onBeforeUnmount(() => {
 .cal-block .cb-time {
   color: #557;
   font-size: 10px;
+}
+.cal-block .cb-score {
+  font-weight: 700;
+  color: #024;
 }
 .dialog-form {
   display: flex;
