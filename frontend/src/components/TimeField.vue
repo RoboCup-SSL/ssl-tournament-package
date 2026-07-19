@@ -43,9 +43,10 @@ function onClockClick(event: MouseEvent) {
     :model-value="modelValue"
     :label="label"
     stack-label
-    readonly
     clearable
+    mask="##:##"
     placeholder="--:--"
+    @update:model-value="set"
     @clear="set('')"
   >
     <template #append>

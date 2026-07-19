@@ -318,7 +318,10 @@ function blankForm(): Form {
 const endTouched = ref(false)
 function onStartTimeChange(value: string | number | null) {
   const start = typeof value === 'string' ? value : ''
-  if (start && !endTouched.value) form.value.endTime = addMinutes(start, defaultDuration())
+  // Only once a full HH:MM is entered (not mid-typing) and end isn't user-set.
+  if (/^\d{2}:\d{2}$/.test(start) && !endTouched.value) {
+    form.value.endTime = addMinutes(start, defaultDuration())
+  }
 }
 function onEndTimeChange() {
   endTouched.value = true
