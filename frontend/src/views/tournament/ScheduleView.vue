@@ -469,7 +469,9 @@ onBeforeUnmount(() => {
       <router-link :to="{ name: 'settings', params: { id: route.params.id } }" class="text-amber-9">Settings</router-link>.
     </q-banner>
 
-    <q-banner v-if="matches.error" class="bg-negative text-white q-mb-md">{{ matches.error }}</q-banner>
+    <q-banner v-if="matches.error && !matches.items.length" class="bg-negative text-white q-mb-md">
+      {{ matches.error }}
+    </q-banner>
 
     <!-- Unscheduled strip -->
     <div class="unscheduled" @dragover.prevent @drop="onDropUnscheduled">
