@@ -1,0 +1,423 @@
+<!doctype html>
+<!-- Temporary stone-age admin UI: raw CRUD over the JSON API for tournaments,
+     divisions, teams, and matches. One vanilla file, no build step; replaced
+     wholesale by the real frontend later. -->
+<meta charset="utf-8">
+<title>SSL Tournament</title>
+<style>
+  body { font-family: sans-serif; margin: 1rem; }
+  nav button { margin-right: .5rem; padding: .3rem .8rem; }
+  nav button.active { font-weight: bold; background: #cde; }
+  table { border-collapse: collapse; margin-top: 1rem; }
+  th, td { border: 1px solid #999; padding: .2rem .5rem; font-size: .85rem;
+           font-family: monospace; text-align: left; }
+  textarea { width: 100%; max-width: 40rem; height: 12rem; font-family: monospace; }
+  #error { background: #fdd; border: 1px solid #c66; padding: .5rem;
+           white-space: pre-wrap; font-family: monospace; display: none; }
+  #editor { display: none; margin-top: 1rem; }
+  details { margin-top: 1rem; }
+  summary { cursor: pointer; color: #666; }
+</style>
+
+<h1 id="heading">SSL Tournament — temporary admin</h1>
+<nav id="tabs"></nav>
+<p id="toolbar">
+  <label>tournament_id filter: <input id="filter" size="6"></label>
+  <button id="reload">reload</button>
+  <button id="create">new</button>
+</p>
+<div id="error"></div>
+<div id="editor">
+  <h3 id="editorTitle"></h3>
+  <textarea id="editorText"></textarea><br>
+  <button id="editorSave">save</button>
+  <button id="editorCancel">cancel</button>
+</div>
+<details open id="schemaBox">
+  <summary>schema</summary>
+  <table id="schema"></table>
+</details>
+<table id="rows"></table>
+<div id="diagram" style="display: none; overflow: auto;"></div>
+
+<script>
+"use strict";
+
+// Create templates per resource; the API fills in defaults and rejects the rest.
+const createTemplates = {
+  tournaments: { name: "" },
+  divisions: { tournament_id: 1, name: "" },
+  teams: { tournament_id: 1, name: "" },
+  fields: { tournament_id: 1, name: "" },
+  "field-bookings": { tournament_id: 1 },
+  groups: { tournament_id: 1, name: "" },
+  matches: { tournament_id: 1 },
+  placements: { tournament_id: 1, rank: 1 },
+};
+
+// Schema names in the OpenAPI document, per resource tab.
+const schemaNames = {
+  tournaments: "Tournament",
+  divisions: "Division",
+  teams: "Team",
+  fields: "Field",
+  "field-bookings": "FieldBooking",
+  groups: "Group",
+  matches: "Match",
+  placements: "Placement",
+};
+
+// Entities drawn on the model tab, and the foreign-key edges between them:
+// [parent, child, label, nullable]. Field lists come from the OpenAPI spec;
+// only these relationships are maintained by hand.
+const modelEntities = [
+  "Tournament", "Division", "Team", "Field",
+  "FieldBooking", "Group", "Match", "Placement",
+];
+const modelRelationships = [
+  ["Tournament", "Division", "tournament_id", false],
+  ["Tournament", "Team", "tournament_id", false],
+  ["Division", "Team", "division_id", true],
+  ["Tournament", "Field", "tournament_id", false],
+  ["Tournament", "FieldBooking", "tournament_id", false],
+  ["Field", "FieldBooking", "field_id", true],
+  ["Team", "FieldBooking", "team_id", true],
+  ["Tournament", "Group", "tournament_id", false],
+  ["Division", "Group", "division_id", true],
+  ["Tournament", "Match", "tournament_id", false],
+  ["Division", "Match", "division_id", true],
+  ["Group", "Match", "group_id", true],
+  ["Field", "Match", "field_id", true],
+  ["Team", "Match", "a/b/referee/assistant/winner team ids", true],
+  ["Group", "Match", "a_source/b_source group_rank", true],
+  ["Match", "Match", "a_source/b_source match_winner/loser", true],
+  ["Tournament", "Placement", "tournament_id", false],
+  ["Division", "Placement", "division_id", true],
+  ["Group", "Placement", "source_group_id", true],
+  ["Match", "Placement", "source_match_id", true],
+  ["Team", "Placement", "resolved_team_id", true],
+];
+
+let currentResource = "tournaments";
+let editorMethod = "POST";
+let editorPath = "";
+let openAPIDocument = null;
+let modelRendered = false;
+
+const element = (id) => document.getElementById(id);
+
+function showError(text) {
+  element("error").textContent = text;
+  element("error").style.display = "block";
+}
+
+function clearError() {
+  element("error").style.display = "none";
+}
+
+// callApi performs one request and throws the error envelope text on failure.
+async function callApi(method, path, body) {
+  const options = { method };
+  if (body !== undefined) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = body;
+  }
+  const response = await fetch(path, options);
+  if (response.status === 204) return null;
+  const payload = await response.json();
+  if (!response.ok) throw new Error(JSON.stringify(payload, null, 2));
+  return payload;
+}
+
+function listPath() {
+  const filter = element("filter").value.trim();
+  if (filter === "" || currentResource === "tournaments") {
+    return "/api/" + currentResource;
+  }
+  return "/api/" + currentResource + "?tournament_id=" + encodeURIComponent(filter);
+}
+
+// renderTable rebuilds the rows table: one column per key seen in any row,
+// plus edit/delete actions. Values render as JSON so nested objects stay visible.
+function renderTable(rows) {
+  const table = element("rows");
+  table.textContent = "";
+  const columns = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!columns.includes(key)) columns.push(key);
+    }
+  }
+  const header = table.insertRow();
+  for (const column of columns.concat("")) {
+    const cell = document.createElement("th");
+    cell.textContent = column;
+    header.appendChild(cell);
+  }
+  for (const row of rows) {
+    const tableRow = table.insertRow();
+    for (const column of columns) {
+      const value = row[column];
+      tableRow.insertCell().textContent =
+        value === null || value === undefined ? "" :
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+    }
+    const actions = tableRow.insertCell();
+    const editButton = document.createElement("button");
+    editButton.textContent = "edit";
+    editButton.onclick = () => openEdit(row);
+    const deleteButton = document.createElement("button");
+    deleteButton.textContent = "delete";
+    deleteButton.onclick = () => removeRow(row.id);
+    actions.append(editButton, " ", deleteButton);
+  }
+}
+
+// loadSchemas fetches the OpenAPI document once and returns its schemas.
+async function loadSchemas() {
+  if (!openAPIDocument) openAPIDocument = await callApi("GET", "/api/openapi.json");
+  return openAPIDocument.components.schemas;
+}
+
+// describeType renders a property's type, inlining referenced sub-schemas
+// (like SlotSource) as their field list.
+function describeType(property, schemas) {
+  if (property.$ref) {
+    const name = property.$ref.split("/").pop();
+    const referenced = schemas[name];
+    return name + "{" + Object.keys(referenced.properties).join(", ") + "}" +
+      (referenced.nullable ? " | null" : "");
+  }
+  let text = property.type;
+  if (property.enum) {
+    text += ": " + property.enum.filter((value) => value !== null).join(" | ");
+  }
+  if (property.nullable) text += " | null";
+  return text;
+}
+
+// defaultWhenOmitted states what the server stores when the field is absent.
+function defaultWhenOmitted(property) {
+  if (property.readOnly) return "server-set";
+  if (property.default !== undefined) return JSON.stringify(property.default);
+  if (property.nullable || property.$ref) return "null";
+  if (property.type === "string") return '""';
+  if (property.type === "integer") return "0";
+  if (property.type === "array") return "[]";
+  return "";
+}
+
+// renderSchema rebuilds the schema table for the current resource.
+function renderSchema(schemas) {
+  const schema = schemas[schemaNames[currentResource]];
+  const table = element("schema");
+  table.textContent = "";
+  const required = schema.required || [];
+  const header = table.insertRow();
+  for (const title of ["field", "type", "required", "default when omitted", "notes"]) {
+    const cell = document.createElement("th");
+    cell.textContent = title;
+    header.appendChild(cell);
+  }
+  for (const [name, property] of Object.entries(schema.properties)) {
+    const tableRow = table.insertRow();
+    tableRow.insertCell().textContent = name;
+    tableRow.insertCell().textContent = describeType(property, schemas);
+    tableRow.insertCell().textContent = required.includes(name) ? "yes" : "";
+    tableRow.insertCell().textContent = required.includes(name) ? "—" : defaultWhenOmitted(property);
+    tableRow.insertCell().textContent = property.description || "";
+  }
+}
+
+// modelAttribute renders one erDiagram attribute line for a schema property.
+function modelAttribute(name, property, required) {
+  let type = property.type || "object";
+  if (property.$ref) type = property.$ref.split("/").pop();
+  const key = name === "id" ? " PK" : name.endsWith("_id") ? " FK" : "";
+  const notes = [];
+  if (property.readOnly) notes.push("server-set");
+  else if (required.includes(name)) notes.push("required");
+  if (property.nullable || property.$ref) notes.push("nullable");
+  if (property.default !== undefined) notes.push("default " + property.default);
+  const comment = notes.length ? ' "' + notes.join(", ") + '"' : "";
+  return "    " + type + " " + name + key + comment;
+}
+
+// modelText builds the mermaid erDiagram source from the OpenAPI schemas
+// and the hand-maintained relationship list.
+function modelText(schemas) {
+  const lines = ["erDiagram"];
+  for (const entity of modelEntities) {
+    const schema = schemas[entity];
+    const required = schema.required || [];
+    lines.push("  " + entity + " {");
+    for (const [name, property] of Object.entries(schema.properties)) {
+      lines.push(modelAttribute(name, property, required));
+    }
+    lines.push("  }");
+  }
+  for (const [parent, child, label, nullable] of modelRelationships) {
+    lines.push("  " + parent + (nullable ? " |o--o{ " : " ||--o{ ") +
+      child + ' : "' + label + '"');
+  }
+  lines.push('  Group }o--o{ Team : "member_team_ids, ranking"');
+  return lines.join("\n");
+}
+
+let mermaidLoading = null;
+
+// loadMermaid injects the mermaid script on first use; the 1 MB library
+// would otherwise delay every page load.
+function loadMermaid() {
+  if (window.mermaid) return Promise.resolve();
+  if (!mermaidLoading) {
+    mermaidLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "mermaid.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("mermaid.min.js failed to load"));
+      document.head.appendChild(script);
+    });
+  }
+  return mermaidLoading;
+}
+
+// showModel renders the data-model diagram once; when mermaid is missing or
+// fails, the diagram source is shown as text instead.
+async function showModel() {
+  if (modelRendered) return;
+  const container = element("diagram");
+  container.textContent = "rendering graph, one second..";
+  // Mermaid loads and renders on the main thread; wait for one paint so the
+  // notice (and the fetched version in the title) show first.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  const text = modelText(await loadSchemas());
+  try {
+    await loadMermaid();
+    mermaid.initialize({ startOnLoad: false });
+    const rendering = mermaid.render("modelGraph", text, (svgCode) => {
+      container.innerHTML = svgCode;
+    });
+    if (rendering && typeof rendering.then === "function") {
+      const { svg } = await rendering;
+      container.innerHTML = svg;
+    }
+    modelRendered = true;
+  } catch (failure) {
+    const source = document.createElement("pre");
+    source.textContent = text;
+    container.textContent = "";
+    container.appendChild(source);
+    showError("mermaid rendering unavailable: " + failure.message);
+  }
+}
+
+async function loadRows() {
+  clearError();
+  try {
+    renderTable(await callApi("GET", listPath()));
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+function openEditor(title, method, path, prefill) {
+  editorMethod = method;
+  editorPath = path;
+  element("editorTitle").textContent = title;
+  element("editorText").value = JSON.stringify(prefill, null, 2);
+  element("editor").style.display = "block";
+}
+
+function openCreate() {
+  openEditor("new " + currentResource, "POST", "/api/" + currentResource,
+    createTemplates[currentResource]);
+}
+
+function openEdit(row) {
+  const patch = { ...row };
+  delete patch.id;
+  delete patch.created_at;
+  openEditor("edit " + currentResource + " " + row.id, "PATCH",
+    "/api/" + currentResource + "/" + row.id, patch);
+}
+
+function closeEditor() {
+  element("editor").style.display = "none";
+}
+
+async function submitEditor() {
+  clearError();
+  try {
+    await callApi(editorMethod, editorPath, element("editorText").value);
+    closeEditor();
+    await loadRows();
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+async function removeRow(id) {
+  if (!confirm("delete " + currentResource + " " + id + "?")) return;
+  clearError();
+  try {
+    await callApi("DELETE", "/api/" + currentResource + "/" + id);
+    await loadRows();
+  } catch (failure) {
+    showError(failure.message);
+  }
+}
+
+async function selectResource(resource) {
+  currentResource = resource;
+  closeEditor();
+  clearError();
+  for (const button of element("tabs").children) {
+    button.classList.toggle("active", button.textContent === resource);
+  }
+  const isModel = resource === "model";
+  element("toolbar").style.display = isModel ? "none" : "";
+  element("schemaBox").style.display = isModel ? "none" : "";
+  element("rows").style.display = isModel ? "none" : "";
+  element("diagram").style.display = isModel ? "" : "none";
+  if (isModel) {
+    try {
+      await showModel();
+    } catch (failure) {
+      showError(failure.message);
+    }
+    return;
+  }
+  try {
+    renderSchema(await loadSchemas());
+  } catch (failure) {
+    showError(failure.message);
+  }
+  loadRows();
+}
+
+for (const resource of ["model"].concat(Object.keys(createTemplates))) {
+  const button = document.createElement("button");
+  button.textContent = resource;
+  button.onclick = () => selectResource(resource);
+  element("tabs").appendChild(button);
+}
+// showVersion puts the server's build version in the title and heading.
+async function showVersion() {
+  try {
+    const payload = await callApi("GET", "/api/version");
+    document.title = "SSL Tournament " + payload.version;
+    element("heading").textContent =
+      "SSL Tournament " + payload.version + " — temporary admin";
+  } catch {
+    // Keep the static title when the version endpoint is unreachable.
+  }
+}
+
+element("reload").onclick = loadRows;
+element("create").onclick = openCreate;
+element("editorSave").onclick = submitEditor;
+element("editorCancel").onclick = closeEditor;
+showVersion();
+selectResource("model");
+</script>
