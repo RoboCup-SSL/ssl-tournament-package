@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useFieldsStore } from '@/store/fields'
+import { toast } from '@/toast'
 import type { Field } from '@/api/types'
 
 const route = useRoute()
@@ -40,10 +41,10 @@ async function submit() {
     if (editing.value) await store.update(editing.value.id, { name: name.value.trim() })
     else await store.create({ name: name.value.trim() })
     if (store.error) {
-      $q.notify({ type: 'negative', message: store.error })
+      toast('negative', store.error)
     } else {
       dialog.value = false
-      $q.notify({ type: 'positive', message: 'Saved' })
+      toast('positive', 'Saved')
     }
   } finally {
     busy.value = false
@@ -54,8 +55,8 @@ function confirmDelete(field: Field) {
   $q.dialog({ title: 'Delete field', message: `Delete "${field.name || 'this field'}"?`, cancel: true })
     .onOk(async () => {
       await store.remove(field.id)
-      if (store.error) $q.notify({ type: 'negative', message: store.error })
-      else $q.notify({ type: 'positive', message: 'Deleted' })
+      if (store.error) toast('negative', store.error)
+      else toast('positive', 'Deleted')
     })
 }
 </script>

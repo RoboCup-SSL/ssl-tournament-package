@@ -12,6 +12,7 @@ import { useTeamsStore } from '@/store/teams'
 import { useTournamentStore } from '@/store/tournament'
 import type { Match, MatchInput } from '@/api/types'
 import TimeField from '@/components/TimeField.vue'
+import { toast } from '@/toast'
 
 const route = useRoute()
 const $q = useQuasar()
@@ -264,8 +265,8 @@ async function onDropUnscheduled() {
   notify(matches.error ? '' : 'Unscheduled')
 }
 function notify(ok: string) {
-  if (matches.error) $q.notify({ type: 'negative', message: matches.error })
-  else if (ok) $q.notify({ type: 'positive', message: ok })
+  if (matches.error) toast('negative', matches.error)
+  else if (ok) toast('positive', ok)
 }
 
 // --- add / edit dialog ---
@@ -400,10 +401,10 @@ async function submit() {
     if (editing.value) await matches.update(editing.value.id, input)
     else await matches.create(input)
     if (matches.error) {
-      $q.notify({ type: 'negative', message: matches.error })
+      toast('negative', matches.error)
     } else {
       dialog.value = false
-      $q.notify({ type: 'positive', message: 'Saved' })
+      toast('positive', 'Saved')
     }
   } finally {
     busy.value = false
@@ -416,10 +417,10 @@ function confirmDelete() {
   $q.dialog({ title: 'Delete match', message: 'Delete this match?', cancel: true }).onOk(async () => {
     await matches.remove(m.id)
     if (matches.error) {
-      $q.notify({ type: 'negative', message: matches.error })
+      toast('negative', matches.error)
     } else {
       dialog.value = false
-      $q.notify({ type: 'positive', message: 'Deleted' })
+      toast('positive', 'Deleted')
     }
   })
 }

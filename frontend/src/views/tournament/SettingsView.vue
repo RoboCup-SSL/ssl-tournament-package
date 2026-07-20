@@ -4,10 +4,9 @@
 // (M2b·dt); native date/time inputs emit exactly the canonical formats.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useQuasar } from 'quasar'
 import { useTournamentStore } from '@/store/tournament'
+import { toast } from '@/toast'
 
-const $q = useQuasar()
 const router = useRouter()
 const store = useTournamentStore()
 
@@ -31,8 +30,8 @@ function filterZones(value: string, update: (fn: () => void) => void) {
 // top-of-page banner is off-screen after saving from the bottom of a long form.
 async function onSave() {
   await store.save()
-  if (store.error) $q.notify({ type: 'negative', message: store.error })
-  else $q.notify({ type: 'positive', message: 'Saved' })
+  if (store.error) toast('negative', store.error)
+  else toast('positive', 'Saved')
 }
 
 // Delete requires typing the tournament's exact name — no accidental deletes.
@@ -52,10 +51,10 @@ async function onDelete() {
     const ok = await store.remove()
     if (ok) {
       deleteDialog.value = false
-      $q.notify({ type: 'positive', message: 'Tournament deleted' })
+      toast('positive', 'Tournament deleted')
       void router.push('/')
     } else {
-      $q.notify({ type: 'negative', message: store.error || 'Delete failed' })
+      toast('negative', store.error || 'Delete failed')
     }
   } finally {
     deleting.value = false

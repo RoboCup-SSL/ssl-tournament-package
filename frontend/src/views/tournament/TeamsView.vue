@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useTeamsStore } from '@/store/teams'
+import { toast } from '@/toast'
 import type { Team, TeamInput } from '@/api/types'
 
 const route = useRoute()
@@ -51,10 +52,10 @@ async function submit() {
     if (editing.value) await store.update(editing.value.id, input)
     else await store.create(input)
     if (store.error) {
-      $q.notify({ type: 'negative', message: store.error })
+      toast('negative', store.error)
     } else {
       dialog.value = false
-      $q.notify({ type: 'positive', message: 'Saved' })
+      toast('positive', 'Saved')
     }
   } finally {
     busy.value = false
@@ -65,8 +66,8 @@ function confirmDelete(team: Team) {
   $q.dialog({ title: 'Delete team', message: `Delete "${team.name || 'this team'}"?`, cancel: true })
     .onOk(async () => {
       await store.remove(team.id)
-      if (store.error) $q.notify({ type: 'negative', message: store.error })
-      else $q.notify({ type: 'positive', message: 'Deleted' })
+      if (store.error) toast('negative', store.error)
+      else toast('positive', 'Deleted')
     })
 }
 </script>
